@@ -7,9 +7,9 @@
 
     Análisis de recorrido de rutas GPX
     comparativa de recorrido pre-diseñado ( teórico ) para una
-    ruta en bicicleta ( o a pie ) con el práctico, cuando se 
-    realiza la ruta en tiempo real, registrando los puntos 
-    geográficos ( waypoints ) 
+    ruta en bicicleta ( o a pie ) con el práctico, cuando se
+    realiza la ruta en tiempo real, registrando los puntos
+    geográficos ( waypoints )
 
     uso de distancia de Haversine para puntos geográficos en una
     esfera como la Tierra.
@@ -35,6 +35,16 @@ class Point:
     lon: float
     ele: float | None
     time: datetime | None
+
+
+@dataclass
+class SpeedData:
+    times: list
+    duration: float
+    avg_speed_kmh: float
+    speeds: np.ndarray
+    stopped_pct: float
+    cum_r: list[float]
 
 
 def parse_gpx(path: str) -> list[Point]:
@@ -106,65 +116,52 @@ def elevation_gain_loss(points: list[Point]) -> tuple[float, float]:
     return float(diff[diff > 0].sum()), float(abs(diff[diff < 0].sum()))
 
 
-
-def main():
-    """programa principal"""
-
-    # parametros de entrada: fichero_teorico fichero_practico
-    parser = argparse.ArgumentParser(
-        description="Compara una ruta GPX teórica con el recorrido actual."
-    )
-    parser.add_argument("theoretical", help="fichero GPX teorico")
-    parser.add_argument(
-        "actual", help="fichero GPX práctico"
-    )
-    args = parser.parse_args()
-
-    # extracción de data points
-    teorica = parse_gpx(args.theoretical)
-    real = parse_gpx(args.actual)
-
-    cum_t, dist_t = total_distance(teorica)
-    cum_r, dist_r = total_distance(real)
-
+def print_route_summary(
+    teorica: list[Point], real: list[Point], dist_t: float, dist_r: float
+) -> None:
+    """Imprime cabecera y comparativa de distancias"""
     print("=" * 60)
     print("  INFORME DE COMPARACIÓN DE RUTAS GPX")
     print("=" * 60)
     print(f"\nRuta teórica   (ruta_teorica):  {len(teorica):>5} puntos  |  {dist_t / 1000:.3f} km")
     print(f"Recorrido real (Samsung Health): {len(real):>5} puntos  |  {dist_r / 1000:.3f} km")
     print(
-        f"Diferencia de distancia: {abs(dist_r - dist_t) / 1000:.3f} km  ({(dist_r - dist_t) / dist_t * 100:+.1f}%)"
+        f"Diferencia de distancia: {abs(dist_r - dist_t) / 1000:.3f} km  "
+        f"({(dist_r - dist_t) / dist_t * 100:+.1f}%)"
     )
 
-    # cada punto real se compara con su vértice teórico
-    buckets = assign_buckets(real, cum_r, dist_r, teorica, cum_t, dist_t)
-    dev_buckets = np.array([haversine(real[i], teorica[buckets[i]]) for i in range(len(real))])
 
-    def print_deviation_stats(dev: np.ndarray, label: str) -> None:
-        print(f"\n{'─' * 60}")
-        print(f"  DESVIACIÓN — {label}")
-        print(f"{'─' * 60}")
-        print(f"  Puntos analizados:     {len(dev)}")
-        print(f"  Desviación media:      {dev.mean():.1f} m")
-        print(f"  Desviación mediana:    {np.median(dev):.1f} m")
-        print(f"  Desviación típica:     {dev.std():.1f} m")
-        print(f"  Desviación máxima:     {dev.max():.1f} m")
-        print(f"  Percentil 95:          {np.percentile(dev, 95):.1f} m")
-        for threshold in (10, 20, 50, 100):
-            pct = (dev <= threshold).mean() * 100
-            print(f"  Dentro de {threshold:>3} m:        {pct:.1f}%")
+def print_deviation_stats(dev: np.ndarray, label: str) -> None:
+    """Imprime estadísticas de desviación"""
+    print(f"\n{'─' * 60}")
+    print(f"  DESVIACIÓN — {label}")
+    print(f"{'─' * 60}")
+    print(f"  Puntos analizados:     {len(dev)}")
+    print(f"  Desviación media:      {dev.mean():.1f} m")
+    print(f"  Desviación mediana:    {np.median(dev):.1f} m")
+    print(f"  Desviación típica:     {dev.std():.1f} m")
+    print(f"  Desviación máxima:     {dev.max():.1f} m")
+    print(f"  Percentil 95:          {np.percentile(dev, 95):.1f} m")
+    for threshold in (10, 20, 50, 100):
+        pct = (dev <= threshold).mean() * 100
+        print(f"  Dentro de {threshold:>3} m:        {pct:.1f}%")
 
-    print_deviation_stats(dev_buckets, "BUCKETS      (447 puntos, vértice por fracción de distancia)")
 
-    dev = dev_buckets  # usar buckets para los gráficos
-
-    # análisis de elevación
+def compute_elevation(
+    teorica: list[Point], real: list[Point]
+) -> tuple[list, list, float, float, float, float]:
+    """Extrae listas de elevación y calcula desniveles"""
     ele_t = [p.ele for p in teorica if p.ele is not None]
     ele_r = [p.ele for p in real if p.ele is not None]
-
     gain_t, loss_t = elevation_gain_loss(teorica)
     gain_r, loss_r = elevation_gain_loss(real)
+    return ele_t, ele_r, gain_t, loss_t, gain_r, loss_r
 
+
+def print_elevation_stats(
+    ele_t: list, ele_r: list, gain_t: float, loss_t: float, gain_r: float, loss_r: float
+) -> None:
+    """Imprime estadísticas de elevación"""
     print(f"\n{'─' * 60}")
     print("  ELEVACIÓN")
     print(f"{'─' * 60}")
@@ -177,60 +174,81 @@ def main():
         f"subida +{gain_r:.0f} m  bajada -{loss_r:.0f} m"
     )
 
-    # análisis de velocidad en ruta
+
+def compute_speed_data(
+    real: list[Point], dist_r: float, cum_r: list[float]
+) -> SpeedData | None:
+    """Calcula estadísticas de velocidad. Devuelve None si no hay datos de tiempo."""
     times = [p.time for p in real if p.time is not None]
-    if times:
-        duration = (times[-1] - times[0]).total_seconds()
-        avg_speed_kmh = (dist_r / 1000) / (duration / 3600)
+    if not times:
+        return None
 
-        speeds = []
-        for i in range(1, len(real)):
-            if real[i].time and real[i - 1].time:
-                dt = (real[i].time - real[i - 1].time).total_seconds()
-                if dt > 0:
-                    d = haversine(real[i - 1], real[i])
-                    speeds.append((d / dt) * 3.6)  # km/h
-        speeds = np.array(speeds)
+    duration = (times[-1] - times[0]).total_seconds()
+    avg_speed_kmh = (dist_r / 1000) / (duration / 3600)
 
-        print(f"\n{'─' * 60}")
-        print("  TIEMPO Y VELOCIDAD DEL RECORRIDO REAL")
-        print(f"{'─' * 60}")
-        start_local = times[0].astimezone()
-        end_local = times[-1].astimezone()
-        print(f"  Inicio:            {start_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        print(f"  Fin:               {end_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-        h, rem = divmod(int(duration), 3600)
-        m, s = divmod(rem, 60)
-        print(f"  Duración:          {h:02d}:{m:02d}:{s:02d}")
-        print(f"  Velocidad media:   {avg_speed_kmh:.1f} km/h")
-        print(f"  Velocidad máxima:  {speeds.max():.1f} km/h")
-        print(f"  Velocidad mediana: {np.median(speeds):.1f} km/h")
+    speeds = []
+    for i in range(1, len(real)):
+        if real[i].time and real[i - 1].time:
+            dt = (real[i].time - real[i - 1].time).total_seconds()
+            if dt > 0:
+                d = haversine(real[i - 1], real[i])
+                speeds.append((d / dt) * 3.6)  # km/h
+    speeds = np.array(speeds)
 
-        # Moving vs stopped
-        stopped_pct = (speeds < 1.0).mean() * 100
-        print(f"  Parado (<1 km/h):  {stopped_pct:.1f}% de los intervalos")
+    return SpeedData(
+        times=times,
+        duration=duration,
+        avg_speed_kmh=avg_speed_kmh,
+        speeds=speeds,
+        stopped_pct=(speeds < 1.0).mean() * 100,
+        cum_r=cum_r,
+    )
 
-    # gráficas
-    fig = plt.figure(figsize=(16, 14))
-    gs = gridspec.GridSpec(3, 2, figure=fig, hspace=0.4, wspace=0.35)
 
+def print_speed_stats(sd: SpeedData) -> None:
+    """Imprime estadísticas de tiempo y velocidad"""
+    print(f"\n{'─' * 60}")
+    print("  TIEMPO Y VELOCIDAD DEL RECORRIDO REAL")
+    print(f"{'─' * 60}")
+    start_local = sd.times[0].astimezone()
+    end_local = sd.times[-1].astimezone()
+    print(f"  Inicio:            {start_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    print(f"  Fin:               {end_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    h, rem = divmod(int(sd.duration), 3600)
+    m, s = divmod(rem, 60)
+    print(f"  Duración:          {h:02d}:{m:02d}:{s:02d}")
+    print(f"  Velocidad media:   {sd.avg_speed_kmh:.1f} km/h")
+    print(f"  Velocidad máxima:  {sd.speeds.max():.1f} km/h")
+    print(f"  Velocidad mediana: {np.median(sd.speeds):.1f} km/h")
+    print(f"  Parado (<1 km/h):  {sd.stopped_pct:.1f}% de los intervalos")
+
+
+def build_plots(
+    teorica: list[Point],
+    real: list[Point],
+    cum_t: list[float],
+    cum_r: list[float],
+    dev: np.ndarray,
+    ele_t: list,
+    ele_r: list,
+    sd: SpeedData | None,
+) -> None:
+    """Genera y guarda las gráficas de comparación"""
     lat_t = [p.lat for p in teorica]
     lon_t = [p.lon for p in teorica]
     lat_r = [p.lat for p in real]
     lon_r = [p.lon for p in real]
 
-    # 1. subplot por mapa
+    fig = plt.figure(figsize=(16, 14))
+    gs = gridspec.GridSpec(3, 2, figure=fig, hspace=0.4, wspace=0.35)
+
+    # 1. mapa
     ax1 = fig.add_subplot(gs[0, :])
     ax1.plot(lon_t, lat_t, "b-", lw=1.5, alpha=0.7, label="Ruta teórica")
     sc = ax1.scatter(
-        lon_r,
-        lat_r,
-        c=dev,
-        cmap="RdYlGn_r",
-        s=4,
-        alpha=0.8,
-        vmin=0,
-        vmax=min(100, np.percentile(dev, 98)),
+        lon_r, lat_r,
+        c=dev, cmap="RdYlGn_r", s=4, alpha=0.8,
+        vmin=0, vmax=min(100, np.percentile(dev, 98)),
         label="Recorrido real (color = desviación)",
     )
     ax1.plot(lon_t[0], lat_t[0], "bs", ms=8, label="Inicio teórico")
@@ -249,7 +267,8 @@ def main():
     ax2.fill_between(np.array(cum_r) / 1000, dev, alpha=0.3, color="coral")
     ax2.axhline(dev.mean(), color="red", ls="--", lw=1.2, label=f"Media {dev.mean():.1f} m")
     ax2.axhline(
-        np.median(dev), color="orange", ls="--", lw=1.2, label=f"Mediana {np.median(dev):.1f} m"
+        np.median(dev), color="orange", ls="--", lw=1.2,
+        label=f"Mediana {np.median(dev):.1f} m"
     )
     ax2.set_xlabel("Distancia real (km)")
     ax2.set_ylabel("Desviación (m)")
@@ -267,22 +286,20 @@ def main():
     ax3.legend(fontsize=8)
 
     # 4. velocidad/distancia
-    if times and len(speeds) > 0:
+    if sd is not None and len(sd.speeds) > 0:
         ax4 = fig.add_subplot(gs[2, 0])
-        spd_dist = np.array(cum_r[1 : len(speeds) + 1]) / 1000
-        # suavizado
-        window = min(30, len(speeds) // 10 or 1)
-        smooth_speeds = np.convolve(speeds, np.ones(window) / window, mode="same")
+        spd_dist = np.array(sd.cum_r[1: len(sd.speeds) + 1]) / 1000
+        window = min(30, len(sd.speeds) // 10 or 1)
+        smooth_speeds = np.convolve(sd.speeds, np.ones(window) / window, mode="same")
         ax4.plot(
-            spd_dist,
-            smooth_speeds,
-            color="steelblue",
-            lw=1.2,
+            spd_dist, smooth_speeds,
+            color="steelblue", lw=1.2,
             label=f"Velocidad (suavizada, v={window})",
         )
         ax4.fill_between(spd_dist, smooth_speeds, alpha=0.25, color="steelblue")
         ax4.axhline(
-            avg_speed_kmh, color="navy", ls="--", lw=1.2, label=f"Media {avg_speed_kmh:.1f} km/h"
+            sd.avg_speed_kmh, color="navy", ls="--", lw=1.2,
+            label=f"Media {sd.avg_speed_kmh:.1f} km/h"
         )
         ax4.set_xlabel("Distancia (km)")
         ax4.set_ylabel("Velocidad (km/h)")
@@ -290,12 +307,13 @@ def main():
         ax4.legend(fontsize=8)
         ax4.set_ylim(bottom=0)
 
-    # 5. histograma de desviación 
+    # 5. histograma de desviación
     ax5 = fig.add_subplot(gs[2, 1])
     ax5.hist(dev, bins=50, color="coral", edgecolor="white", lw=0.4, alpha=0.85)
     for thr, col in [(10, "green"), (20, "orange"), (50, "red")]:
         ax5.axvline(
-            thr, color=col, ls="--", lw=1.2, label=f"{thr} m ({(dev <= thr).mean() * 100:.0f}%)"
+            thr, color=col, ls="--", lw=1.2,
+            label=f"{thr} m ({(dev <= thr).mean() * 100:.0f}%)"
         )
     ax5.set_xlabel("Desviación respecto a la ruta teórica (m)")
     ax5.set_ylabel("Número de puntos GPS")
@@ -309,6 +327,37 @@ def main():
     print(f"\n{'─' * 60}")
     print("  Gráfico guardado → gpx_comparison_simple.png")
     print("=" * 60)
+
+
+def main():
+    """programa principal"""
+    parser = argparse.ArgumentParser(
+        description="Compara una ruta GPX teórica con el recorrido actual."
+    )
+    parser.add_argument("theoretical", help="fichero GPX teorico")
+    parser.add_argument("actual", help="fichero GPX práctico")
+    args = parser.parse_args()
+
+    teorica = parse_gpx(args.theoretical)
+    real = parse_gpx(args.actual)
+
+    cum_t, dist_t = total_distance(teorica)
+    cum_r, dist_r = total_distance(real)
+
+    print_route_summary(teorica, real, dist_t, dist_r)
+
+    buckets = assign_buckets(real, cum_r, dist_r, teorica, cum_t, dist_t)
+    dev = np.array([haversine(real[i], teorica[buckets[i]]) for i in range(len(real))])
+    print_deviation_stats(dev, "BUCKETS      (447 puntos, vértice por fracción de distancia)")
+
+    ele_t, ele_r, gain_t, loss_t, gain_r, loss_r = compute_elevation(teorica, real)
+    print_elevation_stats(ele_t, ele_r, gain_t, loss_t, gain_r, loss_r)
+
+    sd = compute_speed_data(real, dist_r, cum_r)
+    if sd:
+        print_speed_stats(sd)
+
+    build_plots(teorica, real, cum_t, cum_r, dev, ele_t, ele_r, sd)
 
 
 if __name__ == "__main__":
