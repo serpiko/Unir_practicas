@@ -60,9 +60,8 @@ def parse_gpx(path: str) -> list[Point]:
                 lat=float(trkpt.attrib["lat"]),
                 lon=float(trkpt.attrib["lon"]),
                 ele=float(ele_el.text) if ele_el is not None else None,
-                time=datetime.fromisoformat(time_el.text.replace("Z", "+00:00"))
-                if time_el is not None
-                else None,
+                time=datetime.fromisoformat(time_el.text)
+                if time_el is not None else None,
             )
         )
     return points
@@ -323,9 +322,9 @@ def build_plots(
     fig.suptitle(
         "Comparación de rutas GPX: Teórica vs Recorrido real", fontsize=14, fontweight="bold"
     )
-    plt.savefig("gpx_comparison_simple.png", dpi=150, bbox_inches="tight")
+    plt.savefig("gpx_comparison.png", dpi=150, bbox_inches="tight")
     print(f"\n{'─' * 60}")
-    print("  Gráfico guardado → gpx_comparison_simple.png")
+    print("  Gráfico guardado → gpx_comparison.png")
     print("=" * 60)
 
 
