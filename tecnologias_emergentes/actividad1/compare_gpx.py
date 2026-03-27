@@ -233,16 +233,15 @@ def build_plots(
     sd: SpeedData | None,
 ) -> None:
     """Genera y guarda las gráficas de comparación"""
-    lat_t = [p.lat for p in teorica]
-    lon_t = [p.lon for p in teorica]
-    lat_r = [p.lat for p in real]
-    lon_r = [p.lon for p in real]
+    lat_t, lon_t = zip(*[(p.lat, p.lon) for p in teorica])
+    lat_r, lon_r = zip(*[(p.lat, p.lon) for p in real])
 
     fig = plt.figure(figsize=(16, 14))
     gs = gridspec.GridSpec(3, 2, figure=fig, hspace=0.4, wspace=0.35)
 
     # 1. mapa
     ax1 = fig.add_subplot(gs[0, :])
+    # en matplotlib 1er arg=X, 2=Y
     ax1.plot(lon_t, lat_t, "b-", lw=1.5, alpha=0.7, label="Ruta teórica")
     sc = ax1.scatter(
         lon_r, lat_r,
