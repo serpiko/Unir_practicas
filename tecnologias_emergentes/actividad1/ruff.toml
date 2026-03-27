@@ -1,0 +1,21 @@
+# Ruff configuration for compare_gpx.py
+# Docs: https://docs.astral.sh/ruff/configuration/
+
+line-length = 100
+
+[lint]
+# Rule sets to enable:
+#   E/W  – pycodestyle errors and warnings
+#   F    – Pyflakes (unused imports, undefined names, etc.)
+#   I    – isort (import ordering)
+#   UP   – pyupgrade (modernise Python syntax)
+#   B    – flake8-bugbear (likely bugs and design issues)
+select = ["E", "W", "F", "I", "UP", "B"]
+
+# Ignored rules:
+#   E501 – line too long (matplotlib calls are naturally wide)
+ignore = ["E501"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
