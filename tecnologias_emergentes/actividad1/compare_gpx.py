@@ -119,31 +119,34 @@ def print_route_summary(
     teorica: list[Point], real: list[Point], dist_t: float, dist_r: float
 ) -> None:
     """Imprime cabecera y comparativa de distancias"""
-    print("=" * 60)
-    print("  INFORME DE COMPARACIÓN DE RUTAS GPX")
-    print("=" * 60)
-    print(f"\nRuta teórica   (ruta_teorica):  {len(teorica):>5} puntos  |  {dist_t / 1000:.3f} km")
-    print(f"Recorrido real (Samsung Health): {len(real):>5} puntos  |  {dist_r / 1000:.3f} km")
-    print(
+    print("\n".join([
+        "=" * 60,
+        "  INFORME DE COMPARACIÓN DE RUTAS GPX",
+        "=" * 60,
+        f"\nRuta teórica   (ruta_teorica):  {len(teorica):>5} puntos  |  {dist_t / 1000:.3f} km",
+        f"Recorrido real (Samsung Health): {len(real):>5} puntos  |  {dist_r / 1000:.3f} km",
         f"Diferencia de distancia: {abs(dist_r - dist_t) / 1000:.3f} km  "
-        f"({(dist_r - dist_t) / dist_t * 100:+.1f}%)"
-    )
+        f"({(dist_r - dist_t) / dist_t * 100:+.1f}%)",
+    ]))
 
 
 def print_deviation_stats(dev: np.ndarray, label: str) -> None:
     """Imprime estadísticas de desviación"""
-    print(f"\n{'─' * 60}")
-    print(f"  DESVIACIÓN — {label}")
-    print(f"{'─' * 60}")
-    print(f"  Puntos analizados:     {len(dev)}")
-    print(f"  Desviación media:      {dev.mean():.1f} m")
-    print(f"  Desviación mediana:    {np.median(dev):.1f} m")
-    print(f"  Desviación típica:     {dev.std():.1f} m")
-    print(f"  Desviación máxima:     {dev.max():.1f} m")
-    print(f"  Percentil 95:          {np.percentile(dev, 95):.1f} m")
-    for threshold in (10, 20, 50, 100):
-        pct = (dev <= threshold).mean() * 100
-        print(f"  Dentro de {threshold:>3} m:        {pct:.1f}%")
+    lines = [
+        f"\n{'─' * 60}",
+        f"  DESVIACIÓN — {label}",
+        f"{'─' * 60}",
+        f"  Puntos analizados:     {len(dev)}",
+        f"  Desviación media:      {dev.mean():.1f} m",
+        f"  Desviación mediana:    {np.median(dev):.1f} m",
+        f"  Desviación típica:     {dev.std():.1f} m",
+        f"  Desviación máxima:     {dev.max():.1f} m",
+        f"  Percentil 95:          {np.percentile(dev, 95):.1f} m",
+    ] + [
+        f"  Dentro de {t:>3} m:        {(dev <= t).mean() * 100:.1f}%"
+        for t in (10, 20, 50, 100)
+    ]
+    print("\n".join(lines))
 
 
 def compute_elevation(
@@ -161,17 +164,15 @@ def print_elevation_stats(
     ele_t: list, ele_r: list, gain_t: float, loss_t: float, gain_r: float, loss_r: float
 ) -> None:
     """Imprime estadísticas de elevación"""
-    print(f"\n{'─' * 60}")
-    print("  ELEVACIÓN")
-    print(f"{'─' * 60}")
-    print(
+    print("\n".join([
+        f"\n{'─' * 60}",
+        "  ELEVACIÓN",
+        f"{'─' * 60}",
         f"  Teórica: min {min(ele_t):.1f} m  max {max(ele_t):.1f} m  "
-        f"subida +{gain_t:.0f} m  bajada -{loss_t:.0f} m"
-    )
-    print(
+        f"subida +{gain_t:.0f} m  bajada -{loss_t:.0f} m",
         f"  Real:    min {min(ele_r):.1f} m  max {max(ele_r):.1f} m  "
-        f"subida +{gain_r:.0f} m  bajada -{loss_r:.0f} m"
-    )
+        f"subida +{gain_r:.0f} m  bajada -{loss_r:.0f} m",
+    ]))
 
 
 def compute_speed_data(
@@ -206,20 +207,22 @@ def compute_speed_data(
 
 def print_speed_stats(sd: SpeedData) -> None:
     """Imprime estadísticas de tiempo y velocidad"""
-    print(f"\n{'─' * 60}")
-    print("  TIEMPO Y VELOCIDAD DEL RECORRIDO REAL")
-    print(f"{'─' * 60}")
     start_local = sd.times[0].astimezone()
     end_local = sd.times[-1].astimezone()
-    print(f"  Inicio:            {start_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    print(f"  Fin:               {end_local.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     h, rem = divmod(int(sd.duration), 3600)
     m, s = divmod(rem, 60)
-    print(f"  Duración:          {h:02d}:{m:02d}:{s:02d}")
-    print(f"  Velocidad media:   {sd.avg_speed_kmh:.1f} km/h")
-    print(f"  Velocidad máxima:  {sd.speeds.max():.1f} km/h")
-    print(f"  Velocidad mediana: {np.median(sd.speeds):.1f} km/h")
-    print(f"  Parado (<1 km/h):  {sd.stopped_pct:.1f}% de los intervalos")
+    print("\n".join([
+        f"\n{'─' * 60}",
+        "  TIEMPO Y VELOCIDAD DEL RECORRIDO REAL",
+        f"{'─' * 60}",
+        f"  Inicio:            {start_local.strftime('%Y-%m-%d %H:%M:%S %Z')}",
+        f"  Fin:               {end_local.strftime('%Y-%m-%d %H:%M:%S %Z')}",
+        f"  Duración:          {h:02d}:{m:02d}:{s:02d}",
+        f"  Velocidad media:   {sd.avg_speed_kmh:.1f} km/h",
+        f"  Velocidad máxima:  {sd.speeds.max():.1f} km/h",
+        f"  Velocidad mediana: {np.median(sd.speeds):.1f} km/h",
+        f"  Parado (<1 km/h):  {sd.stopped_pct:.1f}% de los intervalos",
+    ]))
 
 
 def build_plots(
@@ -322,9 +325,11 @@ def build_plots(
         "Comparación de rutas GPX: Teórica vs Recorrido real", fontsize=14, fontweight="bold"
     )
     plt.savefig("gpx_comparison.png", dpi=150, bbox_inches="tight")
-    print(f"\n{'─' * 60}")
-    print("  Gráfico guardado → gpx_comparison.png")
-    print("=" * 60)
+    print("\n".join([
+        f"\n{'─' * 60}",
+        "  Gráfico guardado → gpx_comparison.png",
+        "=" * 60,
+    ]))
 
 
 def main():
