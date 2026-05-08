@@ -167,5 +167,6 @@ actividad2/
 ├── sensores_androide.py      # Aplicación principal
 ├── datos_pendientes.csv      # Buffer persistente (generado en ejecución)
 ├── README.md                 # Este archivo
+├── .env                      # credenciales
 └── requirements.txt          # Dependencias pip
 ```
