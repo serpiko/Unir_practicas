@@ -14,10 +14,26 @@ La aplicación genera datos sintéticos en tiempo real simulando los sensores de
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install requests matplotlib
+pip install requests matplotlib python-dotenv
 ```
 
-3. Ejecuta la aplicación:
+3. Crea el fichero `.env` en la raíz del proyecto con tus credenciales de ThingSpeak:
+
+```bash
+cp .env.example .env
+```
+
+Edita `.env` con tus valores reales:
+
+```ini
+THINGSPEAK_CHANNEL_ID=tu_channel_id
+THINGSPEAK_WRITE_KEY=tu_write_api_key
+THINGSPEAK_READ_KEY=tu_read_api_key
+```
+
+> El fichero `.env` está en `.gitignore` y nunca se sube al repositorio.
+
+4. Ejecuta la aplicación:
 
 ```bash
 python sensores_androide.py
