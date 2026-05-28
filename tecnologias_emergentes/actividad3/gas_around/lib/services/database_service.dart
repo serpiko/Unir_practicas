@@ -26,23 +26,47 @@ class DatabaseService {
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, _dbName);
-    return openDatabase(path, version: 1, onCreate: _onCreate);
+    return openDatabase(
+      path,
+      version: 2,
+      onCreate: _onCreate,
+      // onUpgrade se ejecuta cuando el usuario ya tiene la v1 instalada
+      // Borra y recrea la tabla para aplicar el cambio TEXT → REAL en precios
+      onUpgrade: (db, oldVersion, newVersion) async {
+        await db.execute('DROP TABLE IF EXISTS $_tableStations');
+        await _createStationsTable(db);
+      },
+    );
   }
 
   // Crea las tablas en el primer arranque de la app
   Future<void> _onCreate(Database db, int version) async {
+    await _createStationsTable(db);
+
+    // Tabla auxiliar de metadatos (clave-valor) para guardar la fecha de última sincronización
+    await db.execute('''
+      CREATE TABLE $_tableMeta (
+        key   TEXT PRIMARY KEY,
+        value TEXT
+      )
+    ''');
+  }
+
+  // Extraída para poder reutilizarla tanto en onCreate como en onUpgrade
+  Future<void> _createStationsTable(Database db) async {
     // Tabla principal con los datos de cada gasolinera
+    // Los precios son REAL para poder ordenar y filtrar por precio en SQLite
     await db.execute('''
       CREATE TABLE $_tableStations (
-        id              INTEGER PRIMARY KEY AUTOINCREMENT,
-        name            TEXT NOT NULL,
-        address         TEXT,
-        municipality    TEXT,
-        postal_code     TEXT,
-        latitude        REAL,
-        longitude       REAL,
-        price_gasolina95 TEXT,
-        price_gasoil_a  TEXT
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        name             TEXT NOT NULL,
+        address          TEXT,
+        municipality     TEXT,
+        postal_code      TEXT,
+        latitude         REAL,
+        longitude        REAL,
+        price_gasolina95 REAL,
+        price_gasoil_a   REAL
       )
     ''');
 
