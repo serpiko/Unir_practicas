@@ -390,17 +390,17 @@ dart format .
 
   DER — modelo de datos (SQLite):
 
-  ┌─────────────────────┐         ┌───────────────────────────────┐
-  │  ComunidadAutonoma  │  1    N │           stations            │
-  │  (hardcoded Dart)   │────────▶│───────────────────────────────│
-  │─────────────────────│         │ id               INTEGER PK   │
+                                  ┌───────────────────────────────┐
+  ┌─────────────────────┐         │           stations            │
+  │  ComunidadAutonoma  │────────▶│───────────────────────────────│
+  │─────────────────────│ 1    N  │ id               INTEGER PK   │
   │ id_ccaa  TEXT  PK   │         │ name             TEXT         │
   │ nombre   TEXT       │         │ address          TEXT         │
   └─────────────────────┘         │ municipality     TEXT         │
                                   │ postal_code      TEXT         │
-  ┌─────────────────────┐  1    N │ latitude         REAL         │
-  │      Municipio      │────────▶│ longitude        REAL         │
-  │  (DISTINCT de BD)   │         │ price_gasolina95 REAL         │
+                           1    N │ latitude         REAL         │
+  ┌─────────────────────┐         │ longitude        REAL         │
+  │      Municipio      │────────▶│ price_gasolina95 REAL         │
   │─────────────────────│         │ price_gasoil_a   REAL         │
   │ municipality TEXT   │         │ id_ccaa          TEXT  FK     │
   └─────────────────────┘         └───────────────────────────────┘
@@ -426,7 +426,7 @@ dart format .
     gas_station.dart      — modelo de datos; factory fromJson; precios como double?
   services/
     minetur_service.dart  — llamadas HTTP a la API; parsea el JSON de ~11.000 estaciones
-    database_service.dart — SQLite (sqflite); schema v2; batch insert; tabla meta con last_sync
+    database_service.dart — SQLite (sqflite); schema v3; batch insert; tabla meta con last_sync
     sync_service.dart     — estrategia local-primero; devuelve record Dart 3 (stations, isSyncing)
 
 
