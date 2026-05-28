@@ -388,6 +388,34 @@ dart format .
   La pantalla nunca habla directamente con la API ni con la BD.
   Solo conoce a SyncService, que decide de dónde vienen los datos.
 
+  DER — modelo de datos (SQLite):
+
+  ┌─────────────────────┐         ┌───────────────────────────────┐
+  │  ComunidadAutonoma  │  1    N │           stations            │
+  │  (hardcoded Dart)   │────────▶│───────────────────────────────│
+  │─────────────────────│         │ id               INTEGER PK   │
+  │ id_ccaa  TEXT  PK   │         │ name             TEXT         │
+  │ nombre   TEXT       │         │ address          TEXT         │
+  └─────────────────────┘         │ municipality     TEXT         │
+                                  │ postal_code      TEXT         │
+  ┌─────────────────────┐  1    N │ latitude         REAL         │
+  │      Municipio      │────────▶│ longitude        REAL         │
+  │  (DISTINCT de BD)   │         │ price_gasolina95 REAL         │
+  │─────────────────────│         │ price_gasoil_a   REAL         │
+  │ municipality TEXT   │         │ id_ccaa          TEXT  FK     │
+  └─────────────────────┘         └───────────────────────────────┘
+
+  ┌─────────────────────┐
+  │        meta         │
+  │─────────────────────│
+  │ key    TEXT  PK     │   ← solo contiene 'last_sync'
+  │ value  TEXT         │
+  └─────────────────────┘
+
+  ComunidadAutonoma no es una tabla SQLite — sus nombres están hardcodeados
+  en _ccaaNames (station_list_screen.dart) y se cruzan con id_ccaa de stations.
+  Municipio tampoco es tabla: se obtiene con SELECT DISTINCT municipality.
+
   Ficheros principales:
 
   main.dart               — punto de entrada; tema verde; arranca SplashScreen
