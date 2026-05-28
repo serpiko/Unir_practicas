@@ -5,6 +5,10 @@ import '../models/gas_station.dart';
 // Servicio de acceso a la API REST del Ministerio para la Transición Ecológica
 // Documentación: https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/
 class MineTurService {
+  // Constructor privado e instancia única — patrón Singleton
+  MineTurService._();
+  static final MineTurService instance = MineTurService._();
+
   static const _base =
       'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes';
 
