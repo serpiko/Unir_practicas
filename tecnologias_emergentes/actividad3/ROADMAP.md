@@ -154,6 +154,23 @@ Así que vamos a implementar nuestras consultas directamente contra este endpoin
     └─ Destructuring de record Dart 3: final (stations: all, :isSyncing) = await ...
 
   ---
+  Fase 8 — Splash screen y corrección de filtros (implementada)
+
+  SplashScreen (lib/screens/splash_screen.dart)
+    └─ Pantalla de presentación nueva: fondo verde, icono + nombre + subtítulo
+    └─ Fade-in de 800ms con AnimationController + CurvedAnimation
+    └─ Navega a StationListScreen tras 3 segundos con pushReplacement
+       (pushReplacement evita que "back" vuelva al splash)
+    └─ main.dart actualizado: home apunta a SplashScreen en vez de StationListScreen
+
+  Corrección filtros por carburante (lib/screens/station_list_screen.dart)
+    └─ Bug: los chips Gasolina 95 y Gasoil A ordenaban por precio sobre las ~11.000
+       estaciones de toda España → mostraban las más baratas del país, no las cercanas
+    └─ Fix: _filteredStations ahora parte de las 50 más cercanas (nearby) antes de
+       filtrar y reordenar por precio
+    └─ Resultado: "las más baratas entre las gasolineras cercanas a ti"
+
+  ---
   Orden de implementación:
   1. Fase 0 (entender las respuestas de la API) → 2 (modelos + servicios con datos de prueba) → 3 (GPS) → 4 (UI conectada a datos reales) → 5
 
