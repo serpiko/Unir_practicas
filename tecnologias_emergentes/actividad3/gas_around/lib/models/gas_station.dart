@@ -9,6 +9,7 @@ class GasStation {
   final double longitude;   // Longitud WGS84
   final double? priceGasolina95; // Precio Gasolina 95 E5 en €/litro (null si no se vende)
   final double? priceGasoilA;    // Precio Gasoil A en €/litro (null si no se vende)
+  final String idCcaa;      // ID de Comunidad Autónoma (01–19), para filtro por zona
   double? distanceKm; // Distancia calculada en tiempo de ejecución, no viene de la API
 
   GasStation({
@@ -18,6 +19,7 @@ class GasStation {
     required this.postalCode,
     required this.latitude,
     required this.longitude,
+    required this.idCcaa,
     this.priceGasolina95,
     this.priceGasoilA,
     this.distanceKm,
@@ -45,6 +47,7 @@ class GasStation {
       postalCode:       json['C.P.'] ?? '',
       latitude:         _parseCoord(json['Latitud'] ?? '0'),
       longitude:        _parseCoord(json['Longitud (WGS84)'] ?? '0'),
+      idCcaa:           json['IDCCAA'] ?? '',
       // Los precios son opcionales: una estación puede no vender cierto combustible
       priceGasolina95:  _parsePrice(json['Precio Gasolina 95 E5']),
       priceGasoilA:     _parsePrice(json['Precio Gasoleo A']),
