@@ -171,6 +171,31 @@ Así que vamos a implementar nuestras consultas directamente contra este endpoin
     └─ Resultado: "las más baratas entre las gasolineras cercanas a ti"
 
   ---
+  Fase 9 — Filtro por zona: CCAA y Municipio (implementada)
+
+  GasStation (lib/models/gas_station.dart)
+    └─ Campo nuevo: idCcaa (String) — ID de Comunidad Autónoma (01–19)
+    └─ fromJson parsea el campo 'IDCCAA' de la API
+
+  DatabaseService (lib/services/database_service.dart)
+    └─ Schema v3: columna id_ccaa TEXT añadida a stations
+    └─ onUpgrade borra y recrea stations (meta se conserva)
+    └─ _rowToStation() extraída para no duplicar el mapeo entre getAllStations y getStationsByMunicipio
+    └─ Métodos nuevos:
+         getDistinctCcaa()            → IDs de CCAA presentes en la BD
+         getMunicipiosByCcaa(idCcaa)  → municipios de esa CCAA, ordenados alfabéticamente
+         getStationsByMunicipio(muni) → estaciones de un municipio, sin GPS
+
+  StationListScreen (lib/screens/station_list_screen.dart)
+    └─ Dos modos de carga: GPS (modo cercano) y zona (modo municipio, sin GPS)
+    └─ _zoneMode: bool — distingue qué modo está activo
+    └─ Fila 2 de filtros: carrusel de chips por CCAA (19 comunidades hardcodeadas en _ccaaNames)
+    └─ Fila 3 condicional: DropdownButton de municipios al seleccionar una CCAA
+    └─ En modo zona: muestra hasta 20 estaciones; distancia solo si está disponible
+    └─ Pulsar "Buscar cerca" limpia la selección de zona y vuelve al modo GPS
+    └─ ListTile con dense: true — items más compactos
+
+  ---
   Orden de implementación:
   1. Fase 0 (entender las respuestas de la API) → 2 (modelos + servicios con datos de prueba) → 3 (GPS) → 4 (UI conectada a datos reales) → 5
 
