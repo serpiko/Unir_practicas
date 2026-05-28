@@ -18,14 +18,17 @@ class SyncService {
 
   // Punto de entrada principal para la pantalla de gasolineras
   //
-  // Flujo:
-  //   1. Si la BD está vacía (primer arranque) → descarga todo de la API y persiste
-  //   2. Si la BD tiene datos recientes        → los devuelve directamente
-  //   3. Si la BD tiene datos caducados        → los devuelve Y lanza refresh en background
+  // Devuelve un record de Dart 3: (stations, isSyncing)
+  //   isSyncing = true  → se lanzó un refresh en background (datos caducados)
+  //   isSyncing = false → los datos locales son frescos, no hay sync activo
   //
-  // [onSyncComplete] se llama cuando el refresh en background termina,
-  // permitiendo a la UI actualizarse sin bloquear al usuario
-  Future<List<GasStation>> getStations({
+  // Flujo:
+  //   1. BD vacía (primer arranque) → descarga API completa, persiste, isSyncing=false
+  //   2. BD con datos recientes     → devuelve SQLite, isSyncing=false
+  //   3. BD con datos caducados     → devuelve SQLite, lanza refresh, isSyncing=true
+  //
+  // [onSyncComplete] se llama cuando el refresh en background termina
+  Future<({List<GasStation> stations, bool isSyncing})> getStations({
     void Function()? onSyncComplete,
   }) async {
     final empty = await _db.isEmpty();
@@ -34,7 +37,7 @@ class SyncService {
       // Primer arranque: sin datos locales, la descarga inicial es obligatoria
       final stations = await _api.fetchAllStations();
       await _db.seedStations(stations);
-      return stations;
+      return (stations: stations, isSyncing: false);
     }
 
     // Comprueba si los datos almacenados han superado el límite de antigüedad
@@ -51,7 +54,8 @@ class SyncService {
       }).catchError((_) {});
     }
 
-    // Devuelve siempre los datos locales (frescos o caducados) de forma instantánea
-    return _db.getAllStations();
+    // Devuelve siempre los datos locales de forma instantánea
+    final stations = await _db.getAllStations();
+    return (stations: stations, isSyncing: isStale);
   }
 }

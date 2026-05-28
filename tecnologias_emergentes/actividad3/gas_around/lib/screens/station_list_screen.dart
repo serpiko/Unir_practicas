@@ -43,16 +43,15 @@ class _StationListScreenState extends State<StationListScreen> {
       );
 
       // Solicita las gasolineras al SyncService, que decide si usar caché o API
-      // onSyncComplete es un callback: se llama cuando el refresh en background termina
-      // permitiendo actualizar la UI sin haber bloqueado al usuario
-      final all = await _sync.getStations(
+      // El record devuelto contiene los datos y si hay un sync activo en background
+      final (stations: all, :isSyncing) = await _sync.getStations(
         onSyncComplete: () {
           if (mounted) setState(() => _syncing = false);
         },
       );
 
-      // Si SyncService lanzó un refresh en background, activamos el indicador visual
-      _syncing = all.isNotEmpty;
+      // isSyncing viene directamente de SyncService — true solo si los datos estaban caducados
+      _syncing = isSyncing;
 
       // Calcula la distancia en km entre el dispositivo y cada gasolinera
       // Geolocator.distanceBetween devuelve metros, dividimos entre 1000
