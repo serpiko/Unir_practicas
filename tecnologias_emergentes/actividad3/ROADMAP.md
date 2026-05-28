@@ -122,6 +122,38 @@ Así que vamos a implementar nuestras consultas directamente contra este endpoin
     └─ Los errores de red no interrumpen la app: SyncService los absorbe y usa la caché
 
   ---
+  Fase 7 — Precios como double y filtro por carburante (implementada)
+
+  GasStation (lib/models/gas_station.dart)
+    └─ priceGasolina95 y priceGasoilA cambian de String? a double?
+    └─ _parsePrice() nuevo helper: convierte "1,659" → 1.659 (coma → punto), devuelve null si vacío
+    └─ Permite comparar y ordenar precios directamente sin conversión posterior
+
+  DatabaseService (lib/services/database_service.dart)
+    └─ Esquema sube de versión 1 a versión 2
+    └─ Columnas price_gasolina95 y price_gasoil_a: TEXT → REAL
+    └─ onUpgrade añadido: borra y recrea la tabla stations en dispositivos con v1 instalada
+    └─ _createStationsTable extraída como método independiente para evitar duplicar el SQL
+       entre onCreate y onUpgrade — meta no se toca en el upgrade porque persiste entre versiones
+
+  SyncService (lib/services/sync_service.dart)
+    └─ Tipo de retorno cambia de List<GasStation> a record de Dart 3:
+       ({List<GasStation> stations, bool isSyncing})
+    └─ isSyncing=true solo cuando los datos estaban caducados y se lanzó refresh en background
+    └─ Permite a la UI saber exactamente cuándo mostrar el indicador de sync
+
+  StationListScreen (lib/screens/station_list_screen.dart)
+    └─ Enum FuelFilter: all | gasolina95 | gasoilA — define los filtros disponibles
+    └─ _allStations guarda todas las estaciones con distancia calculada
+    └─ _filteredStations getter: aplica el filtro activo sobre _allStations
+         all       → las 7 más cercanas, ordenadas por distancia
+         gasolina95 → estaciones con ese carburante, ordenadas por precio ascendente
+         gasoilA   → ídem para gasoil
+    └─ _buildFilterBar(): fila de FilterChip horizontales desplazables
+    └─ Precio destacado en negrita cuando hay filtro activo; ambos precios si no hay filtro
+    └─ Destructuring de record Dart 3: final (stations: all, :isSyncing) = await ...
+
+  ---
   Orden de implementación:
   1. Fase 0 (entender las respuestas de la API) → 2 (modelos + servicios con datos de prueba) → 3 (GPS) → 4 (UI conectada a datos reales) → 5
 
