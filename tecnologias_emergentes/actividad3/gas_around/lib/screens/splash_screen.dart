@@ -27,7 +27,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
 
-    // Navega a la pantalla principal tras 2 segundos
+    // Navega a la pantalla principal tras 3 segundos
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -79,6 +79,23 @@ class _SplashScreenState extends State<SplashScreen>
                 style: TextStyle(
                   fontSize: 14,
                   color: colors.onPrimary.withValues(alpha: 0.8),
+                  letterSpacing: 1,
+                ),
+              ),
+              // mi firma y referencia la asignatura y Unir
+              Text(
+                'por Raúl Muñoz para la asignatura',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: colors.onPrimary.withValues(alpha: 0.8),
+                  letterSpacing: 1,
+                ),
+              ),
+              Text(
+                'Tecnologías Emergentes, Grado Unir',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: colors.onPrimary.withValues(alpha: 0.8, red: 1, green: 0.5),
                   letterSpacing: 1,
                 ),
               ),
