@@ -243,14 +243,19 @@ class _StationListScreenState extends State<StationListScreen> {
             child: Row(
               children: _ccaaIds.map((id) {
                 final selected = _selectedCcaa == id;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    selected: selected,
-                    label: Text(_ccaaNames[id] ?? id),
-                    onSelected: (_) => selected
-                        ? setState(() { _selectedCcaa = null; _municipios = []; _selectedMunicipio = null; })
-                        : _onCcaaSelected(id),
+                return Tooltip(
+                  message: selected
+                      ? 'Toca para quitar el filtro de ${_ccaaNames[id] ?? id}'
+                      : 'Filtrar gasolineras de ${_ccaaNames[id] ?? id}',
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      selected: selected,
+                      label: Text(_ccaaNames[id] ?? id),
+                      onSelected: (_) => selected
+                          ? setState(() { _selectedCcaa = null; _municipios = []; _selectedMunicipio = null; })
+                          : _onCcaaSelected(id),
+                    ),
                   ),
                 );
               }).toList(),
@@ -258,16 +263,19 @@ class _StationListScreenState extends State<StationListScreen> {
           ),
         // Fila 3: dropdown de municipio (solo si hay una CCAA seleccionada)
         if (_selectedCcaa != null && _municipios.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-            child: DropdownButton<String>(
-              isExpanded: true,
-              hint: const Text('Selecciona municipio'),
-              value: _selectedMunicipio,
-              items: _municipios
-                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                  .toList(),
-              onChanged: (m) { if (m != null) _onMunicipioSelected(m); },
+          Tooltip(
+            message: 'Selecciona un municipio para ver sus gasolineras sin necesidad de GPS',
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: DropdownButton<String>(
+                isExpanded: true,
+                hint: const Text('Selecciona municipio'),
+                value: _selectedMunicipio,
+                items: _municipios
+                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                    .toList(),
+                onChanged: (m) { if (m != null) _onMunicipioSelected(m); },
+              ),
             ),
           ),
       ],
