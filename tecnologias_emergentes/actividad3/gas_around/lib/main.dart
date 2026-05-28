@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/station_list_screen.dart';
+import 'screens/splash_screen.dart';
 
 // Punto de entrada de la aplicación Flutter
 void main() {
@@ -19,8 +19,8 @@ class GasAroundApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      // Pantalla principal: listado de gasolineras cercanas
-      home: const StationListScreen(),
+      // La app arranca con la pantalla de presentación
+      home: const SplashScreen(),
     );
   }
 }
