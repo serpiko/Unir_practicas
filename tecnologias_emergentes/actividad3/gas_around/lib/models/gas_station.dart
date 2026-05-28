@@ -47,7 +47,7 @@ class GasStation {
       longitude:        _parseCoord(json['Longitud (WGS84)'] ?? '0'),
       // Los precios son opcionales: una estación puede no vender cierto combustible
       priceGasolina95:  _parsePrice(json['Precio Gasolina 95 E5']),
-      priceGasoilA:     _parsePrice(json['Precio Gasoil A']),
+      priceGasoilA:     _parsePrice(json['Precio Gasoleo A']),
     );
   }
 }
