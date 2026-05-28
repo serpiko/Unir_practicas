@@ -7,8 +7,8 @@ class GasStation {
   final String postalCode;  // Código postal
   final double latitude;    // Latitud WGS84
   final double longitude;   // Longitud WGS84
-  final String? priceGasolina95; // Precio Gasolina 95 E5 (puede estar vacío)
-  final String? priceGasoilA;    // Precio Gasoil A (puede estar vacío)
+  final double? priceGasolina95; // Precio Gasolina 95 E5 en €/litro (null si no se vende)
+  final double? priceGasoilA;    // Precio Gasoil A en €/litro (null si no se vende)
   double? distanceKm; // Distancia calculada en tiempo de ejecución, no viene de la API
 
   GasStation({
@@ -23,8 +23,15 @@ class GasStation {
     this.distanceKm,
   });
 
-  // La API devuelve coordenadas con coma decimal ("40,416775") en lugar de punto
+  // La API devuelve números con coma decimal ("1,659") en lugar de punto
   // Este helper convierte ese formato al double estándar de Dart
+  // Devuelve null si el campo está vacío o no es un número válido
+  static double? _parsePrice(String? s) {
+    if (s == null || s.trim().isEmpty) return null;
+    return double.tryParse(s.replaceAll(',', '.'));
+  }
+
+  // La API devuelve coordenadas con coma decimal ("40,416775") en lugar de punto
   static double _parseCoord(String s) =>
       double.tryParse(s.replaceAll(',', '.')) ?? 0.0;
 
@@ -39,8 +46,8 @@ class GasStation {
       latitude:         _parseCoord(json['Latitud'] ?? '0'),
       longitude:        _parseCoord(json['Longitud (WGS84)'] ?? '0'),
       // Los precios son opcionales: una estación puede no vender cierto combustible
-      priceGasolina95:  json['Precio Gasolina 95 E5'],
-      priceGasoilA:     json['Precio Gasoil A'],
+      priceGasolina95:  _parsePrice(json['Precio Gasolina 95 E5']),
+      priceGasoilA:     _parsePrice(json['Precio Gasoil A']),
     );
   }
 }
