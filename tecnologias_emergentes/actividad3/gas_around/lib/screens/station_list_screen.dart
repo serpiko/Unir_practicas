@@ -71,7 +71,7 @@ class _StationListScreenState extends State<StationListScreen> {
 
       // Actualiza el estado con las 20 más cercanas para no sobrecargar la lista
       setState(() {
-        _stations = all.take(20).toList();
+        _stations = all.take(7).toList();
         _loading = false;
       });
     } catch (e) {
