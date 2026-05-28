@@ -146,11 +146,11 @@ class _StationListScreenState extends State<StationListScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (s.priceGasolina95 != null && s.priceGasolina95!.isNotEmpty)
-                Text('95: ${s.priceGasolina95} €',
+              if (s.priceGasolina95 != null)
+                Text('95: ${s.priceGasolina95!.toStringAsFixed(3)} €',
                     style: const TextStyle(fontSize: 12)),
-              if (s.priceGasoilA != null && s.priceGasoilA!.isNotEmpty)
-                Text('A: ${s.priceGasoilA} €',
+              if (s.priceGasoilA != null)
+                Text('A: ${s.priceGasoilA!.toStringAsFixed(3)} €',
                     style: const TextStyle(fontSize: 12)),
               Text('${s.distanceKm!.toStringAsFixed(1)} km',
                   style: const TextStyle(fontSize: 11, color: Colors.grey)),

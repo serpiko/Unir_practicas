@@ -43,7 +43,7 @@ class DatabaseService {
   Future<void> _onCreate(Database db, int version) async {
     await _createStationsTable(db);
 
-    // Tabla auxiliar de metadatos (clave-valor) para guardar la fecha de última sincronización
+    // meta solo se crea en onCreate — onUpgrade no la toca porque persiste entre versiones
     await db.execute('''
       CREATE TABLE $_tableMeta (
         key   TEXT PRIMARY KEY,
@@ -53,8 +53,8 @@ class DatabaseService {
   }
 
   // Extraída para poder reutilizarla tanto en onCreate como en onUpgrade
+  // Solo crea la tabla stations — meta se crea únicamente en onCreate
   Future<void> _createStationsTable(Database db) async {
-    // Tabla principal con los datos de cada gasolinera
     // Los precios son REAL para poder ordenar y filtrar por precio en SQLite
     await db.execute('''
       CREATE TABLE $_tableStations (
@@ -67,14 +67,6 @@ class DatabaseService {
         longitude        REAL,
         price_gasolina95 REAL,
         price_gasoil_a   REAL
-      )
-    ''');
-
-    // Tabla auxiliar de metadatos (clave-valor) para guardar la fecha de última sincronización
-    await db.execute('''
-      CREATE TABLE $_tableMeta (
-        key   TEXT PRIMARY KEY,
-        value TEXT
       )
     ''');
   }
@@ -95,8 +87,8 @@ class DatabaseService {
         'postal_code':      s.postalCode,
         'latitude':         s.latitude,
         'longitude':        s.longitude,
-        'price_gasolina95': s.priceGasolina95,
-        'price_gasoil_a':   s.priceGasoilA,
+        'price_gasolina95': s.priceGasolina95,  // double? → SQLite REAL
+        'price_gasoil_a':   s.priceGasoilA,    // double? → SQLite REAL
       });
     }
 
@@ -116,8 +108,8 @@ class DatabaseService {
       postalCode:       row['postal_code'] as String? ?? '',
       latitude:         row['latitude'] as double? ?? 0.0,
       longitude:        row['longitude'] as double? ?? 0.0,
-      priceGasolina95:  row['price_gasolina95'] as String?,
-      priceGasoilA:     row['price_gasoil_a'] as String?,
+      priceGasolina95:  row['price_gasolina95'] as double?,
+      priceGasoilA:     row['price_gasoil_a'] as double?,
     )).toList();
   }
 
