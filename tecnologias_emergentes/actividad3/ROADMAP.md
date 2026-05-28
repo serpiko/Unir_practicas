@@ -2,6 +2,19 @@ Hoja de ruta de implementación
   
   Fase 0 — Explorando las APIs (Apartado 1)
 
+El enunciado define 2 urls principales de las que consumir datos vía API Rest, pero resulta que ambas atacan a la misma
+API por detrás:
+
+  datos.gob.es/catalogo/e05068001...  →  portal web
+      └─ botón "Servicio REST" → Acceder  →  sedeaplicaciones.minetur.gob.es  ✓ ya implementado
+
+  geoportalgasolineras.es  →  portal web
+      └─ pestaña "Descargar ficheros" → "Información actualizada de precios"
+          └─ servicios REST al final de la página  →  también apunta a sedeaplicaciones.minetur.gob.es
+
+Así que vamos a implementar nuestras consultas directamente contra este endpoint, definiendo el servicio Minetur en nuestra app flutter.
+
+
   Portal 1 — MinETUR REST (datos.gob.es backbone):
   # todas las estaciones
   https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/
@@ -80,6 +93,33 @@ Hoja de ruta de implementación
   - Spinner de carga mientras se obtienen los datos
   - Estados de error "sin conexión" / "GPS desactivado"
   - Cachear la última respuesta correcta para que la app funcione offline tras la primera carga
+
+  ---
+  Fase 6 — Caché local con SQLite (implementada)
+
+  La inestabilidad de la API motivó añadir una capa de persistencia local con SQLite,
+  usando el paquete sqflite. Se añadieron dos servicios nuevos:
+
+  DatabaseService (lib/services/database_service.dart)
+    └─ Singleton con constructor privado
+    └─ Crea y gestiona la base de datos gas_around.db con dos tablas:
+         stations — ~11.000 gasolineras con nombre, dirección, coordenadas y precios
+         meta     — clave-valor para guardar la fecha de última sincronización
+    └─ seedStations() usa batch insert para eficiencia con grandes volúmenes
+
+  SyncService (lib/services/sync_service.dart)
+    └─ Singleton que orquesta la estrategia local-primero:
+         1. BD vacía (primer arranque) → descarga API completa → persiste en SQLite
+         2. BD con datos recientes (< 24h) → devuelve SQLite directamente
+         3. BD con datos caducados (> 24h) → devuelve SQLite Y lanza refresh en background
+    └─ El callback onSyncComplete (void Function()?) notifica a la UI cuando
+       el refresh termina sin haberla bloqueado — patrón de función como parámetro
+
+  StationListScreen actualizada:
+    └─ Ya no llama a MineTurService directamente
+    └─ Usa SyncService.instance.getStations()
+    └─ Muestra LinearProgressIndicator bajo el AppBar durante el sync en background
+    └─ Los errores de red no interrumpen la app: SyncService los absorbe y usa la caché
 
   ---
   Orden de implementación:
@@ -278,3 +318,22 @@ services para servicios de acceso API como MineturService
   │ station_list_screen.dart │ Flujo GPS → HTTP → cálculo de distancia → ordenación, los tres estados del         │
   │                          │ _buildBody(), por qué se limita a 20 resultados                                    │
   └──────────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
+
+# Capa de Datos local
+Las APIs propuestas para esta práctica son muy inestables
+
+# Depuración en dispositivo android conectado y con modo desarrollador activado
+
+flutter devices  
+Found 3 connected devices:
+  Aquaris X2 Pro (mobile) • XV009147 • android-arm64  • Android 10 (API 29)
+  Linux (desktop)         • linux    • linux-x64      • Ubuntu 24.04.4 LTS 6.8.0-117-generic
+  Chrome (web)            • chrome   • web-javascript • Google Chrome 148.0.7778.178
+
+El nuestro es el viejo Aquarix X2, la compilación tarda unos 2 minutos
+```
+flutter run -d XV009147
+Launching lib/main.dart on Aquaris X2 Pro in debug mode...
+Running Gradle task 'assembleDebug'...                  
+```
+
