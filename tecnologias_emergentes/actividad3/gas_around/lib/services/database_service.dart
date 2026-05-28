@@ -28,10 +28,10 @@ class DatabaseService {
     final path = join(dbPath, _dbName);
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
-      // onUpgrade se ejecuta cuando el usuario ya tiene la v1 instalada
-      // Borra y recrea la tabla para aplicar el cambio TEXT → REAL en precios
+      // onUpgrade borra y recrea stations para aplicar cambios de esquema
+      // meta no se toca: persiste entre versiones
       onUpgrade: (db, oldVersion, newVersion) async {
         await db.execute('DROP TABLE IF EXISTS $_tableStations');
         await _createStationsTable(db);
@@ -66,7 +66,8 @@ class DatabaseService {
         latitude         REAL,
         longitude        REAL,
         price_gasolina95 REAL,
-        price_gasoil_a   REAL
+        price_gasoil_a   REAL,
+        id_ccaa          TEXT
       )
     ''');
   }
@@ -87,8 +88,9 @@ class DatabaseService {
         'postal_code':      s.postalCode,
         'latitude':         s.latitude,
         'longitude':        s.longitude,
-        'price_gasolina95': s.priceGasolina95,  // double? → SQLite REAL
-        'price_gasoil_a':   s.priceGasoilA,    // double? → SQLite REAL
+        'price_gasolina95': s.priceGasolina95,
+        'price_gasoil_a':   s.priceGasoilA,
+        'id_ccaa':          s.idCcaa,
       });
     }
 
@@ -101,17 +103,51 @@ class DatabaseService {
   Future<List<GasStation>> getAllStations() async {
     final db = await database;
     final rows = await db.query(_tableStations);
-    return rows.map((row) => GasStation(
-      name:             row['name'] as String,
-      address:          row['address'] as String? ?? '',
-      municipality:     row['municipality'] as String? ?? '',
-      postalCode:       row['postal_code'] as String? ?? '',
-      latitude:         row['latitude'] as double? ?? 0.0,
-      longitude:        row['longitude'] as double? ?? 0.0,
-      priceGasolina95:  row['price_gasolina95'] as double?,
-      priceGasoilA:     row['price_gasoil_a'] as double?,
-    )).toList();
+    return rows.map(_rowToStation).toList();
   }
+
+  // Devuelve los IDs de CCAA distintos presentes en la BD, ordenados
+  Future<List<String>> getDistinctCcaa() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT id_ccaa FROM $_tableStations WHERE id_ccaa IS NOT NULL AND id_ccaa != "" ORDER BY id_ccaa',
+    );
+    return rows.map((r) => r['id_ccaa'] as String).toList();
+  }
+
+  // Devuelve los nombres de municipio de una CCAA, ordenados alfabéticamente
+  Future<List<String>> getMunicipiosByCcaa(String idCcaa) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT DISTINCT municipality FROM $_tableStations WHERE id_ccaa = ? AND municipality != "" ORDER BY municipality',
+      [idCcaa],
+    );
+    return rows.map((r) => r['municipality'] as String).toList();
+  }
+
+  // Devuelve todas las estaciones de un municipio concreto
+  Future<List<GasStation>> getStationsByMunicipio(String municipio) async {
+    final db = await database;
+    final rows = await db.query(
+      _tableStations,
+      where: 'municipality = ?',
+      whereArgs: [municipio],
+      orderBy: 'name ASC',
+    );
+    return rows.map(_rowToStation).toList();
+  }
+
+  GasStation _rowToStation(Map<String, Object?> row) => GasStation(
+    name:             row['name'] as String,
+    address:          row['address'] as String? ?? '',
+    municipality:     row['municipality'] as String? ?? '',
+    postalCode:       row['postal_code'] as String? ?? '',
+    latitude:         row['latitude'] as double? ?? 0.0,
+    longitude:        row['longitude'] as double? ?? 0.0,
+    idCcaa:           row['id_ccaa'] as String? ?? '',
+    priceGasolina95:  row['price_gasolina95'] as double?,
+    priceGasoilA:     row['price_gasoil_a'] as double?,
+  );
 
   Future<bool> isEmpty() async {
     final db = await database;
