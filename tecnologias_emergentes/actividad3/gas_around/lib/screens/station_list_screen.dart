@@ -2,14 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/gas_station.dart';
 import '../services/sync_service.dart';
+import '../services/database_service.dart';
 
-// Tipos de carburante disponibles como filtro
-// 'all' muestra todas las estaciones ordenadas por distancia
-// Los demás filtran a estaciones que venden ese carburante y ordenan por precio
+// Nombres oficiales de las 19 Comunidades Autónomas indexados por IDCCAA de MineTur
+const _ccaaNames = {
+  '01': 'Andalucía',
+  '02': 'Aragón',
+  '03': 'Asturias',
+  '04': 'Illes Balears',
+  '05': 'Canarias',
+  '06': 'Cantabria',
+  '07': 'Castilla-La Mancha',
+  '08': 'Castilla y León',
+  '09': 'Cataluña',
+  '10': 'C. Valenciana',
+  '11': 'Extremadura',
+  '12': 'Galicia',
+  '13': 'Madrid',
+  '14': 'Murcia',
+  '15': 'Navarra',
+  '16': 'País Vasco',
+  '17': 'La Rioja',
+  '18': 'Ceuta',
+  '19': 'Melilla',
+};
+
+// Tipos de carburante disponibles como filtro de precio
 enum FuelFilter { all, gasolina95, gasoilA }
 
-// Pantalla principal: muestra las gasolineras más cercanas a la ubicación del dispositivo
-// Lee de la caché SQLite local primero y actualiza en background si los datos están caducados
+// Pantalla principal: muestra gasolineras por proximidad GPS o por zona (CCAA + municipio)
 class StationListScreen extends StatefulWidget {
   const StationListScreen({super.key});
 
@@ -18,101 +39,129 @@ class StationListScreen extends StatefulWidget {
 }
 
 class _StationListScreenState extends State<StationListScreen> {
-  // Accede al SyncService a través de su instancia Singleton
   final _sync = SyncService.instance;
+  final _db   = DatabaseService.instance;
 
-  // Estado interno de la pantalla
-  List<GasStation> _allStations = []; // Todas las estaciones cargadas (con distancia calculada)
-  bool _loading = false;              // Controla el indicador de carga inicial
-  bool _syncing = false;              // Indica sincronización en background (datos caducados)
-  String? _error;                     // Mensaje de error, null si no hay error
-  FuelFilter _filter = FuelFilter.all; // Filtro activo seleccionado por el usuario
+  List<GasStation> _allStations = [];
+  bool _loading  = false;
+  bool _syncing  = false;
+  String? _error;
+  FuelFilter _filter = FuelFilter.all;
 
-  // Aplica el filtro activo sobre _allStations y devuelve la lista a mostrar
-  // Siempre parte de las 50 más cercanas para no mostrar estaciones de otras provincias
-  // Si hay filtro de carburante: filtra las que venden ese combustible y ordena por precio
-  // Si no hay filtro: devuelve las 7 más cercanas ordenadas por distancia
-  List<GasStation> get _filteredStations {
-    // Universo de búsqueda: las 50 gasolineras más cercanas al usuario
-    final nearby = _allStations.take(50).toList();
+  // Estado del filtro por zona
+  List<String> _ccaaIds     = [];       // IDs de CCAA presentes en la BD
+  String?      _selectedCcaa;           // CCAA activa
+  List<String> _municipios  = [];       // Municipios de la CCAA seleccionada
+  String?      _selectedMunicipio;      // Municipio activo
+  bool         _zoneMode    = false;    // true cuando la lista viene del filtro de zona
 
-    switch (_filter) {
-      case FuelFilter.gasolina95:
-        final withFuel = nearby
-            .where((s) => s.priceGasolina95 != null)
-            .toList()
-          ..sort((a, b) => a.priceGasolina95!.compareTo(b.priceGasolina95!));
-        return withFuel.take(7).toList();
+  @override
+  void initState() {
+    super.initState();
+    _loadCcaaIds();
+  }
 
-      case FuelFilter.gasoilA:
-        final withFuel = nearby
-            .where((s) => s.priceGasoilA != null)
-            .toList()
-          ..sort((a, b) => a.priceGasoilA!.compareTo(b.priceGasoilA!));
-        return withFuel.take(7).toList();
+  // Carga los IDs de CCAA disponibles en la BD para poblar los chips
+  Future<void> _loadCcaaIds() async {
+    final ids = await _db.getDistinctCcaa();
+    if (mounted) setState(() => _ccaaIds = ids);
+  }
 
-      case FuelFilter.all:
-        return nearby.take(7).toList();
+  // Al pulsar un chip de CCAA: carga los municipios de esa CCAA
+  Future<void> _onCcaaSelected(String idCcaa) async {
+    setState(() {
+      _selectedCcaa      = idCcaa;
+      _selectedMunicipio = null;
+      _municipios        = [];
+    });
+    final munis = await _db.getMunicipiosByCcaa(idCcaa);
+    if (mounted) setState(() => _municipios = munis);
+  }
+
+  // Al seleccionar un municipio en el dropdown: carga sus estaciones sin GPS
+  Future<void> _onMunicipioSelected(String municipio) async {
+    setState(() {
+      _selectedMunicipio = municipio;
+      _loading           = true;
+      _error             = null;
+    });
+    try {
+      final stations = await _db.getStationsByMunicipio(municipio);
+      setState(() {
+        _allStations = stations;
+        _zoneMode    = true;
+        _loading     = false;
+      });
+    } catch (e) {
+      setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  // Función principal: obtiene el GPS y carga las gasolineras desde la caché local
-  // La primera vez descarga de la API y persiste en SQLite; las siguientes veces es instantáneo
+  // Aplica el filtro de carburante sobre la lista activa
+  // En modo zona muestra hasta 20 resultados; en modo GPS las 7 más cercanas
+  List<GasStation> get _filteredStations {
+    final pool = _zoneMode ? _allStations : _allStations.take(50).toList();
+    final limit = _zoneMode ? 20 : 7;
+
+    switch (_filter) {
+      case FuelFilter.gasolina95:
+        return (pool.where((s) => s.priceGasolina95 != null).toList()
+              ..sort((a, b) => a.priceGasolina95!.compareTo(b.priceGasolina95!)))
+            .take(limit)
+            .toList();
+      case FuelFilter.gasoilA:
+        return (pool.where((s) => s.priceGasoilA != null).toList()
+              ..sort((a, b) => a.priceGasoilA!.compareTo(b.priceGasoilA!)))
+            .take(limit)
+            .toList();
+      case FuelFilter.all:
+        return pool.take(limit).toList();
+    }
+  }
+
+  // Busca las gasolineras más cercanas usando el GPS del dispositivo
   Future<void> _loadNearbyStations() async {
     setState(() {
-      _loading = true;
-      _error = null;
+      _loading           = true;
+      _error             = null;
+      _zoneMode          = false;
+      _selectedCcaa      = null;
+      _selectedMunicipio = null;
+      _municipios        = [];
     });
 
     try {
-      // Comprueba si el permiso de ubicación está concedido y lo solicita si no
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         await Geolocator.requestPermission();
       }
 
-      // Obtiene las coordenadas actuales del dispositivo con alta precisión (GPS)
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
       );
 
-      // Solicita las gasolineras al SyncService, que decide si usar caché o API
-      // El record devuelto contiene los datos y si hay un sync activo en background
       final (stations: all, :isSyncing) = await _sync.getStations(
         onSyncComplete: () {
           if (mounted) setState(() => _syncing = false);
         },
       );
 
-      // isSyncing viene directamente de SyncService — true solo si los datos estaban caducados
       _syncing = isSyncing;
 
-      // Calcula la distancia en km entre el dispositivo y cada gasolinera
-      // Geolocator.distanceBetween devuelve metros, dividimos entre 1000
       for (final s in all) {
         s.distanceKm = Geolocator.distanceBetween(
-              position.latitude,
-              position.longitude,
-              s.latitude,
-              s.longitude,
-            ) /
-            1000;
+              position.latitude, position.longitude,
+              s.latitude,        s.longitude,
+            ) / 1000;
       }
-
-      // Ordena por distancia — base para el filtro 'all' y punto de partida para los demás
       all.sort((a, b) => (a.distanceKm ?? 0).compareTo(b.distanceKm ?? 0));
 
-      setState(() {
-        _allStations = all;
-        _loading = false;
-      });
+      setState(() { _allStations = all; _loading = false; });
+
+      // Recarga los IDs de CCAA por si la BD se acaba de poblar por primera vez
+      _loadCcaaIds();
     } catch (e) {
-      // Captura errores de GPS desactivado o permisos denegados
-      // Los errores de red no llegan aquí: SyncService los absorbe y usa la caché
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -122,7 +171,6 @@ class _StationListScreenState extends State<StationListScreen> {
       appBar: AppBar(
         title: const Text('GasAround'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Indicador de sincronización en background: barra sutil bajo el AppBar
         bottom: _syncing
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -135,15 +183,13 @@ class _StationListScreenState extends State<StationListScreen> {
         onPressed: _loading ? null : _loadNearbyStations,
         icon: const Icon(Icons.my_location),
         label: const Text('Buscar cerca'),
+        tooltip: 'Usa el GPS para mostrar las gasolineras más cercanas',
       ),
     );
   }
 
-  // Construye el cuerpo de la pantalla según el estado actual
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_error != null) {
       return Center(
@@ -154,48 +200,97 @@ class _StationListScreenState extends State<StationListScreen> {
       );
     }
 
-    if (_allStations.isEmpty) {
-      return const Center(
-        child: Text('Pulsa el botón para buscar gasolineras cercanas'),
+    if (_allStations.isEmpty && !_zoneMode) {
+      return Column(
+        children: [
+          _buildFilterBar(),
+          const Expanded(
+            child: Center(child: Text('Pulsa el botón para buscar gasolineras cercanas')),
+          ),
+        ],
       );
     }
 
-    // Estado con datos: barra de filtros + lista
     return Column(
       children: [
         _buildFilterBar(),
-        Expanded(child: _buildList()),
+        if (_allStations.isNotEmpty || _zoneMode) Expanded(child: _buildList()),
       ],
     );
   }
 
-  // Fila de chips para seleccionar el tipo de carburante
-  // Al seleccionar un chip se reordena la lista por precio de ese carburante
   Widget _buildFilterBar() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          _filterChip(FuelFilter.all,        'Distancia',   Icons.near_me),
-          _filterChip(FuelFilter.gasolina95, 'Gasolina 95', Icons.local_gas_station),
-          _filterChip(FuelFilter.gasoilA,    'Gasoleo A',   Icons.opacity),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Fila 1: filtro por tipo de carburante
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: Row(
+            children: [
+              _fuelChip(FuelFilter.all,        'Distancia',   Icons.near_me),
+              _fuelChip(FuelFilter.gasolina95, 'Gasolina 95', Icons.local_gas_station),
+              _fuelChip(FuelFilter.gasoilA,    'Gasoleo A',   Icons.opacity),
+            ],
+          ),
+        ),
+        // Fila 2: filtro por CCAA (solo si hay datos en la BD)
+        if (_ccaaIds.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            child: Row(
+              children: _ccaaIds.map((id) {
+                final selected = _selectedCcaa == id;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: selected,
+                    label: Text(_ccaaNames[id] ?? id),
+                    onSelected: (_) => selected
+                        ? setState(() { _selectedCcaa = null; _municipios = []; _selectedMunicipio = null; })
+                        : _onCcaaSelected(id),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        // Fila 3: dropdown de municipio (solo si hay una CCAA seleccionada)
+        if (_selectedCcaa != null && _municipios.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: DropdownButton<String>(
+              isExpanded: true,
+              hint: const Text('Selecciona municipio'),
+              value: _selectedMunicipio,
+              items: _municipios
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                  .toList(),
+              onChanged: (m) { if (m != null) _onMunicipioSelected(m); },
+            ),
+          ),
+      ],
     );
   }
 
-  // Chip individual: resaltado cuando es el filtro activo
-  Widget _filterChip(FuelFilter value, String label, IconData icon) {
-    final selected = _filter == value;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        selected: selected,
-        label: Text(label),
-        avatar: Icon(icon, size: 16),
-        // Al pulsar cambia el filtro activo y la lista se recalcula via _filteredStations
-        onSelected: (_) => setState(() => _filter = value),
+  static const _fuelTooltips = {
+    FuelFilter.all:        'Ordena las gasolineras cercanas por distancia',
+    FuelFilter.gasolina95: 'Muestra las más baratas en Gasolina 95 entre las cercanas',
+    FuelFilter.gasoilA:    'Muestra las más baratas en Gasoleo A entre las cercanas',
+  };
+
+  Widget _fuelChip(FuelFilter value, String label, IconData icon) {
+    return Tooltip(
+      message: _fuelTooltips[value] ?? '',
+      child: Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: FilterChip(
+          selected: _filter == value,
+          label: Text(label),
+          avatar: Icon(icon, size: 16),
+          onSelected: (_) => setState(() => _filter = value),
+        ),
       ),
     );
   }
@@ -204,16 +299,13 @@ class _StationListScreenState extends State<StationListScreen> {
     final stations = _filteredStations;
 
     if (stations.isEmpty) {
-      return const Center(
-        child: Text('No hay estaciones cercanas con ese carburante'),
-      );
+      return const Center(child: Text('No hay estaciones con ese carburante'));
     }
 
     return ListView.builder(
       itemCount: stations.length,
       itemBuilder: (context, index) {
         final s = stations[index];
-        // Precio destacado según el filtro activo
         final highlightPrice = switch (_filter) {
           FuelFilter.gasolina95 => s.priceGasolina95,
           FuelFilter.gasoilA    => s.priceGasoilA,
@@ -221,28 +313,29 @@ class _StationListScreenState extends State<StationListScreen> {
         };
 
         return ListTile(
+          dense: true,
           leading: const Icon(Icons.local_gas_station),
-          title: Text(s.name),
-          subtitle: Text('${s.address}, ${s.municipality}'),
+          title: Text(s.name, style: const TextStyle(fontSize: 14)),
+          subtitle: Text('${s.address}, ${s.municipality}',
+              style: const TextStyle(fontSize: 12)),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // Si hay filtro activo muestra ese precio en grande, si no muestra ambos
               if (highlightPrice != null)
                 Text('${highlightPrice.toStringAsFixed(3)} €',
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.bold))
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))
               else ...[
                 if (s.priceGasolina95 != null)
                   Text('95: ${s.priceGasolina95!.toStringAsFixed(3)} €',
-                      style: const TextStyle(fontSize: 12)),
+                      style: const TextStyle(fontSize: 11)),
                 if (s.priceGasoilA != null)
-                  Text('Gleo: ${s.priceGasoilA!.toStringAsFixed(3)} €',
-                      style: const TextStyle(fontSize: 12)),
+                  Text('A: ${s.priceGasoilA!.toStringAsFixed(3)} €',
+                      style: const TextStyle(fontSize: 11)),
               ],
-              Text('${s.distanceKm!.toStringAsFixed(1)} km',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              if (s.distanceKm != null)
+                Text('${s.distanceKm!.toStringAsFixed(1)} km',
+                    style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
           ),
         );
