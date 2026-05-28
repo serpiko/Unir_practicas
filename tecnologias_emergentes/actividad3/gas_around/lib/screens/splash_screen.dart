@@ -27,8 +27,8 @@ class _SplashScreenState extends State<SplashScreen>
 
     _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
 
-    // Navega a la pantalla principal tras 3 segundos
-    Future.delayed(const Duration(seconds: 3), () {
+    // Navega a la pantalla principal tras 4 segundos
+    Future.delayed(const Duration(seconds: 4), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const StationListScreen()),
