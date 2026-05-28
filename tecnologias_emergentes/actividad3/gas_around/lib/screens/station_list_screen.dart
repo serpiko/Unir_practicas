@@ -29,26 +29,30 @@ class _StationListScreenState extends State<StationListScreen> {
   FuelFilter _filter = FuelFilter.all; // Filtro activo seleccionado por el usuario
 
   // Aplica el filtro activo sobre _allStations y devuelve la lista a mostrar
-  // Si hay filtro de carburante: excluye estaciones sin ese precio y ordena por precio
+  // Siempre parte de las 50 más cercanas para no mostrar estaciones de otras provincias
+  // Si hay filtro de carburante: filtra las que venden ese combustible y ordena por precio
   // Si no hay filtro: devuelve las 7 más cercanas ordenadas por distancia
   List<GasStation> get _filteredStations {
+    // Universo de búsqueda: las 50 gasolineras más cercanas al usuario
+    final nearby = _allStations.take(50).toList();
+
     switch (_filter) {
       case FuelFilter.gasolina95:
-        final withFuel = _allStations
+        final withFuel = nearby
             .where((s) => s.priceGasolina95 != null)
             .toList()
           ..sort((a, b) => a.priceGasolina95!.compareTo(b.priceGasolina95!));
         return withFuel.take(7).toList();
 
       case FuelFilter.gasoilA:
-        final withFuel = _allStations
+        final withFuel = nearby
             .where((s) => s.priceGasoilA != null)
             .toList()
           ..sort((a, b) => a.priceGasoilA!.compareTo(b.priceGasoilA!));
         return withFuel.take(7).toList();
 
       case FuelFilter.all:
-        return _allStations.take(7).toList();
+        return nearby.take(7).toList();
     }
   }
 
@@ -175,7 +179,7 @@ class _StationListScreenState extends State<StationListScreen> {
         children: [
           _filterChip(FuelFilter.all,        'Distancia',   Icons.near_me),
           _filterChip(FuelFilter.gasolina95, 'Gasolina 95', Icons.local_gas_station),
-          _filterChip(FuelFilter.gasoilA,    'Gasoil A',    Icons.opacity),
+          _filterChip(FuelFilter.gasoilA,    'Gasoleo A',   Icons.opacity),
         ],
       ),
     );
@@ -234,7 +238,7 @@ class _StationListScreenState extends State<StationListScreen> {
                   Text('95: ${s.priceGasolina95!.toStringAsFixed(3)} €',
                       style: const TextStyle(fontSize: 12)),
                 if (s.priceGasoilA != null)
-                  Text('A: ${s.priceGasoilA!.toStringAsFixed(3)} €',
+                  Text('Gleo: ${s.priceGasoilA!.toStringAsFixed(3)} €',
                       style: const TextStyle(fontSize: 12)),
               ],
               Text('${s.distanceKm!.toStringAsFixed(1)} km',
