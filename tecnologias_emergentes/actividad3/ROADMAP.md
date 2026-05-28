@@ -348,25 +348,51 @@ flutter analyze
 dart format .
 
 
-# Diseño de Implementación inicial
-3 módulos principales: 
-screens para pantallas
-models para modelos de datos
-services para servicios de acceso API como MineturService
-  ┌──────────────────────────┬────────────────────────────────────────────────────────────────────────────────────┐
-  │           File           │                                Comentarios añadidos                                │
-  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
-  │ main.dart                │ Punto de entrada, configuración del tema y pantalla inicial                        │
-  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
-  │ gas_station.dart         │ Por qué se usa factory, por qué se reemplaza la coma decimal, qué campos son       │
-  │                          │ opcionales                                                                         │
-  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
-  │ minetur_service.dart     │ Cuándo usar cada endpoint, por qué se usa Map para municipios, estructura de la    │
-  │                          │ respuesta JSON                                                                     │
-  ├──────────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
-  │ station_list_screen.dart │ Flujo GPS → HTTP → cálculo de distancia → ordenación, los tres estados del         │
-  │                          │ _buildBody(), por qué se limita a 20 resultados                                    │
-  └──────────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
+# Diseño de Implementación
+
+3 módulos principales: screens · models · services
+
+  Arquitectura en capas:
+
+  StationListScreen
+       │
+       └─ SyncService          ← orquestador local-primero (caché o API)
+            ├─ DatabaseService  ← SQLite, persistencia entre sesiones
+            └─ MineTurService   ← API REST del Ministerio
+
+  La pantalla nunca habla directamente con la API ni con la BD.
+  Solo conoce a SyncService, que decide de dónde vienen los datos.
+
+  Ficheros principales:
+
+  main.dart               — punto de entrada; tema verde; arranca SplashScreen
+  screens/
+    splash_screen.dart    — presentación animada, navega a StationListScreen tras 3s
+    station_list_screen.dart — GPS → distancias → filtros por carburante
+  models/
+    gas_station.dart      — modelo de datos; factory fromJson; precios como double?
+  services/
+    minetur_service.dart  — llamadas HTTP a la API; parsea el JSON de ~11.000 estaciones
+    database_service.dart — SQLite (sqflite); schema v2; batch insert; tabla meta con last_sync
+    sync_service.dart     — estrategia local-primero; devuelve record Dart 3 (stations, isSyncing)
+
+
+# Gestión de estado del widget: mounted
+
+  En Flutter, un widget puede desaparecer del árbol mientras hay callbacks asíncronos pendientes
+  (timers, Futures, animaciones). Usar context o setState sobre un widget ya destruido lanza excepción.
+
+  mounted es una propiedad de State que vale true mientras el widget vive en el árbol
+  y false en cuanto se llama a dispose(). El patrón estándar:
+
+  Future.delayed(duration, () {
+    if (mounted) {          // ¿sigue vivo el widget?
+      setState(() { ... }); // solo entonces toca el estado o el context
+    }
+  });
+
+  En SplashScreen se usa para evitar llamar a Navigator.pushReplacement si el usuario
+  abandonó la pantalla antes de que expiren los 3 segundos del temporizador.
 
 # Capa de Datos local
 Las APIs propuestas para esta práctica son muy inestables
