@@ -5,6 +5,7 @@ class GasStation {
   final String address;     // Dirección postal
   final String municipality; // Municipio
   final String postalCode;  // Código postal
+  final String? horario;
   final double latitude;    // Latitud WGS84
   final double longitude;   // Longitud WGS84
   final double? priceGasolina95; // Precio Gasolina 95 E5 en €/litro (null si no se vende)
@@ -17,6 +18,7 @@ class GasStation {
     required this.address,
     required this.municipality,
     required this.postalCode,
+    this.horario,
     required this.latitude,
     required this.longitude,
     required this.idCcaa,
@@ -45,6 +47,7 @@ class GasStation {
       address:          json['Dirección'] ?? '',
       municipality:     json['Municipio'] ?? '',
       postalCode:       json['C.P.'] ?? '',
+      horario:          json['Horario'],
       latitude:         _parseCoord(json['Latitud'] ?? '0'),
       longitude:        _parseCoord(json['Longitud (WGS84)'] ?? '0'),
       idCcaa:           json['IDCCAA'] ?? '',
