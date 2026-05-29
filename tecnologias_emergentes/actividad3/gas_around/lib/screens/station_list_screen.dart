@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/gas_station.dart';
 import '../services/sync_service.dart';
 import '../services/database_service.dart';
@@ -303,6 +304,94 @@ class _StationListScreenState extends State<StationListScreen> {
     );
   }
 
+  // Muestra un panel inferior con el detalle completo de la estación
+  void _showDetail(GasStation s) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Nombre
+            Text(s.name,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            // Dirección
+            Row(children: [
+              const Icon(Icons.location_on, size: 16, color: Colors.grey),
+              const SizedBox(width: 6),
+              Expanded(child: Text('${s.address}, ${s.municipality} ${s.postalCode}')),
+            ]),
+            // Horario
+            if (s.horario != null && s.horario!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(children: [
+                const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(s.horario!),
+              ]),
+            ],
+            const Divider(height: 24),
+            // Precios
+            if (s.priceGasolina95 != null)
+              _priceRow('Gasolina 95 E5', s.priceGasolina95!),
+            if (s.priceGasoilA != null)
+              _priceRow('Gasoleo A', s.priceGasoilA!),
+            if (s.distanceKm != null) ...[
+              const SizedBox(height: 4),
+              Text('Distancia: ${s.distanceKm!.toStringAsFixed(1)} km',
+                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            ],
+            const SizedBox(height: 16),
+            // Botón de navegación
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.directions),
+                label: const Text('Cómo llegar'),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _openInMaps(s);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _priceRow(String label, double price) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label),
+            Text('${price.toStringAsFixed(3)} €',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+
+  // Abre Google Maps (o cualquier app de mapas del sistema) con navegación a la estación
+  Future<void> _openInMaps(GasStation s) async {
+    final uri = Uri.parse(
+      'geo:${s.latitude},${s.longitude}?q=${s.latitude},${s.longitude}(${Uri.encodeComponent(s.name)})',
+    );
+    if (!await launchUrl(uri)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se encontró app de mapas instalada')),
+        );
+      }
+    }
+  }
+
   Widget _buildList() {
     final stations = _filteredStations;
 
@@ -323,6 +412,7 @@ class _StationListScreenState extends State<StationListScreen> {
         return ListTile(
           dense: true,
           leading: const Icon(Icons.local_gas_station),
+          onTap: () => _showDetail(s),
           title: Text(s.name, style: const TextStyle(fontSize: 14)),
           subtitle: Text('${s.address}, ${s.municipality}',
               style: const TextStyle(fontSize: 12)),
