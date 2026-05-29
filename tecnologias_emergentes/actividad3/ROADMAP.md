@@ -1,467 +1,543 @@
-Hoja de ruta de implementación
-  
-  Fase 0 — Explorando las APIs (Apartado 1)
+# Hoja de ruta — GasAround
 
-El enunciado define 2 urls principales de las que consumir datos vía API Rest, pero resulta que ambas atacan a la misma
-API por detrás:
+App Flutter que consulta precios de carburantes en tiempo real contra la API REST
+del Ministerio de Industria (MinETUR), con caché local SQLite y localización GPS.
 
-  datos.gob.es/catalogo/e05068001...  →  portal web
-      └─ botón "Servicio REST" → Acceder  →  sedeaplicaciones.minetur.gob.es  ✓ ya implementado
-
-  geoportalgasolineras.es  →  portal web
-      └─ pestaña "Descargar ficheros" → "Información actualizada de precios"
-          └─ servicios REST al final de la página  →  también apunta a sedeaplicaciones.minetur.gob.es
-
-Así que vamos a implementar nuestras consultas directamente contra este endpoint, definiendo el servicio Minetur en nuestra app flutter.
-
-
-  Portal 1 — MinETUR REST (datos.gob.es backbone):
-  # todas las estaciones
-  https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/
-
-  # filtro por ID de municipio
-  https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestresFiltradas/<
-  idMunicipio>
-  
-  # filtrado por ID de carburante
-  https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestresFiltradas/F
-  iltroProducto/<idProducto>
-  
-  # Lista de minicipios ( resuelve GPS por municipio )
-  https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/Municipios/
-
-  # listado de carburantes
-  https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/Productos/
-
-  Portal 2 — Geoportal gasolineras:
-  # Precios actuales (volcado completo, mismos datos, diferente formato)
-  https://geoportalgasolineras.es/resources/files/preciosEESS_es.json
-
- Ambos devuelven un json, mientras que Portal 1 soporta filtrado, Portal 2 parece útil como fallback.
-
-  ---
-  Fase 1 — estructura del proyecto
-
-  - Creación de proyecto Flutter (es.unir org, Android target)
-  - Añadir dependencias a pubspec.yaml:
-  http: ^1.2.0          # API calls
-  geolocator: ^13.0.0   # GPS
-  permission_handler: ^11.0.0  # permisos en tiempo de ejecución
-  - Añadir permisos GPS al AndroidManifest.xml
-
-  ---
-  Fase 2 — Capa de datos
-
-  Definimos 3 model classes en Dart sincronizando la API json:
-
-  ┌──────────────┬───────────────────────────────────────────────┐
-  │    Clase     │                    Propósito                  │
-  ├──────────────┼───────────────────────────────────────────────┤
-  │ GasStation   │una estación:nombre, dirección, lat/lon,precios│
-  ├──────────────┼───────────────────────────────────────────────┤
-  │ FuelProduct  │ catalogo de productos (Gasolina95, Gasoil A)  │
-  ├──────────────┼───────────────────────────────────────────────┤
-  │ Municipality │ id + nombre, resuelve posiciones GPS          │
-  └──────────────┴───────────────────────────────────────────────┘
-
-  Una service class por fuente de datos:
-  - MineTurService — consulta el Portal 1, resuelve el municipio desde coordenadas
-  - GeoportalService — consulta el Portal 2 como fallback
-
-  ---
-  Fase 3 — Lógica de ubicación
-
-  1. Solicitar permiso ACCESS_FINE_LOCATION en tiempo de ejecución
-  2. Obtener la posición actual (lat/lon) via geolocator
-  3. Llamar al endpoint Municipios/, encontrar el municipio más cercano comparando coordenadas — o usar reverse-geocoding
-  4. Usar ese idMunicipio para filtrar la consulta de gasolineras
-
-  ---
-  Fase 4 — UI (3 pantallas)
-
-  HomeScreen
-    └─ botón "Buscar cerca" → lanza GPS + llamada API
-  StationListScreen
-    └─ ListView de gasolineras, ordenadas por distancia
-    └─ barra de filtro: selector de tipo de carburante (Gasolina 95, Gasoil A, etc.)
-  StationDetailScreen
-    └─ dirección completa, todos los precios, distancia desde el usuario
-
-  ---
-  Fase 5 — Acabados y gestión de errores
-
-  - Spinner de carga mientras se obtienen los datos
-  - Estados de error "sin conexión" / "GPS desactivado"
-  - Cachear la última respuesta correcta para que la app funcione offline tras la primera carga
-
-  ---
-  Fase 6 — Caché local con SQLite (implementada)
-
-  La inestabilidad de la API motivó añadir una capa de persistencia local con SQLite,
-  usando el paquete sqflite. Se añadieron dos servicios nuevos:
-
-  DatabaseService (lib/services/database_service.dart)
-    └─ Singleton con constructor privado
-    └─ Crea y gestiona la base de datos gas_around.db con dos tablas:
-         stations — ~11.000 gasolineras con nombre, dirección, coordenadas y precios
-         meta     — clave-valor para guardar la fecha de última sincronización
-    └─ seedStations() usa batch insert para eficiencia con grandes volúmenes
-
-  SyncService (lib/services/sync_service.dart)
-    └─ Singleton que orquesta la estrategia local-primero:
-         1. BD vacía (primer arranque) → descarga API completa → persiste en SQLite
-         2. BD con datos recientes (< 24h) → devuelve SQLite directamente
-         3. BD con datos caducados (> 24h) → devuelve SQLite Y lanza refresh en background
-    └─ El callback onSyncComplete (void Function()?) notifica a la UI cuando
-       el refresh termina sin haberla bloqueado — patrón de función como parámetro
-
-  StationListScreen actualizada:
-    └─ Ya no llama a MineTurService directamente
-    └─ Usa SyncService.instance.getStations()
-    └─ Muestra LinearProgressIndicator bajo el AppBar durante el sync en background
-    └─ Los errores de red no interrumpen la app: SyncService los absorbe y usa la caché
-
-  ---
-  Fase 7 — Precios como double y filtro por carburante (implementada)
-
-  GasStation (lib/models/gas_station.dart)
-    └─ priceGasolina95 y priceGasoilA cambian de String? a double?
-    └─ _parsePrice() nuevo helper: convierte "1,659" → 1.659 (coma → punto), devuelve null si vacío
-    └─ Permite comparar y ordenar precios directamente sin conversión posterior
-
-  DatabaseService (lib/services/database_service.dart)
-    └─ Esquema sube de versión 1 a versión 2
-    └─ Columnas price_gasolina95 y price_gasoil_a: TEXT → REAL
-    └─ onUpgrade añadido: borra y recrea la tabla stations en dispositivos con v1 instalada
-    └─ _createStationsTable extraída como método independiente para evitar duplicar el SQL
-       entre onCreate y onUpgrade — meta no se toca en el upgrade porque persiste entre versiones
-
-  SyncService (lib/services/sync_service.dart)
-    └─ Tipo de retorno cambia de List<GasStation> a record de Dart 3:
-       ({List<GasStation> stations, bool isSyncing})
-    └─ isSyncing=true solo cuando los datos estaban caducados y se lanzó refresh en background
-    └─ Permite a la UI saber exactamente cuándo mostrar el indicador de sync
-
-  StationListScreen (lib/screens/station_list_screen.dart)
-    └─ Enum FuelFilter: all | gasolina95 | gasoilA — define los filtros disponibles
-    └─ _allStations guarda todas las estaciones con distancia calculada
-    └─ _filteredStations getter: aplica el filtro activo sobre _allStations
-         all       → las 7 más cercanas, ordenadas por distancia
-         gasolina95 → estaciones con ese carburante, ordenadas por precio ascendente
-         gasoilA   → ídem para gasoil
-    └─ _buildFilterBar(): fila de FilterChip horizontales desplazables
-    └─ Precio destacado en negrita cuando hay filtro activo; ambos precios si no hay filtro
-    └─ Destructuring de record Dart 3: final (stations: all, :isSyncing) = await ...
-
-  ---
-  Fase 8 — Splash screen y corrección de filtros (implementada)
-
-  SplashScreen (lib/screens/splash_screen.dart)
-    └─ Pantalla de presentación nueva: fondo verde, icono + nombre + subtítulo
-    └─ Fade-in de 800ms con AnimationController + CurvedAnimation
-    └─ Navega a StationListScreen tras 3 segundos con pushReplacement
-       (pushReplacement evita que "back" vuelva al splash)
-    └─ main.dart actualizado: home apunta a SplashScreen en vez de StationListScreen
-
-  Corrección filtros por carburante (lib/screens/station_list_screen.dart)
-    └─ Bug: los chips Gasolina 95 y Gasoil A ordenaban por precio sobre las ~11.000
-       estaciones de toda España → mostraban las más baratas del país, no las cercanas
-    └─ Fix: _filteredStations ahora parte de las 50 más cercanas (nearby) antes de
-       filtrar y reordenar por precio
-    └─ Resultado: "las más baratas entre las gasolineras cercanas a ti"
-
-  ---
-  Fase 9 — Filtro por zona: CCAA y Municipio (implementada)
-
-  GasStation (lib/models/gas_station.dart)
-    └─ Campo nuevo: idCcaa (String) — ID de Comunidad Autónoma (01–19)
-    └─ fromJson parsea el campo 'IDCCAA' de la API
-
-  DatabaseService (lib/services/database_service.dart)
-    └─ Schema v3: columna id_ccaa TEXT añadida a stations
-    └─ onUpgrade borra y recrea stations (meta se conserva)
-    └─ _rowToStation() extraída para no duplicar el mapeo entre getAllStations y getStationsByMunicipio
-    └─ Métodos nuevos:
-         getDistinctCcaa()            → IDs de CCAA presentes en la BD
-         getMunicipiosByCcaa(idCcaa)  → municipios de esa CCAA, ordenados alfabéticamente
-         getStationsByMunicipio(muni) → estaciones de un municipio, sin GPS
-
-  StationListScreen (lib/screens/station_list_screen.dart)
-    └─ Dos modos de carga: GPS (modo cercano) y zona (modo municipio, sin GPS)
-    └─ _zoneMode: bool — distingue qué modo está activo
-    └─ Fila 2 de filtros: carrusel de chips por CCAA (19 comunidades hardcodeadas en _ccaaNames)
-    └─ Fila 3 condicional: DropdownButton de municipios al seleccionar una CCAA
-    └─ En modo zona: muestra hasta 20 estaciones; distancia solo si está disponible
-    └─ Pulsar "Buscar cerca" limpia la selección de zona y vuelve al modo GPS
-    └─ ListTile con dense: true — items más compactos
-
-  ---
-  Orden de implementación:
-  1. Fase 0 (entender las respuestas de la API) → 2 (modelos + servicios con datos de prueba) → 3 (GPS) → 4 (UI conectada a datos reales) → 5
-
-  Así la integración con la API se puede probar de forma aislada antes de que exista la UI.
+UNIR · Tecnologías Emergentes · Grado en Informática · Actividad 3
 
 ---
-Conceptos básicos de Dart para llamadas a API REST
-1. Las llamadas de red tardan tiempo, Dart lo gestiona con Future, que devuelve una "promesa" de un String, no el String en sí:
 
-Future<String> fetchData() async {
-    String result = await requestAPI();
-    return result;
-}
-2. HTTP request:
-// add http to pubspec.yaml
-import 'package:http/http.dart' as http;
-import 'dart:convert'; // for jsonDecode
-const EstacionesTerrestres ='https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/';
-Future<void> fetchStations() async{
-    final url = Uri.parse(EstacionesTerrestres);
-    final response = await http.get(url);
-    if (response.statusCode == 200){
-        final data = jsonDecode(response.body);
-        print(data);
-    }else {
-     print('error ${response.statusCode}');
+## 1. Fuentes de datos
+
+Ambas URLs del enunciado apuntan al mismo backend:
+
+```
+datos.gob.es/catalogo/e05068001...  →  botón "Servicio REST"
+geoportalgasolineras.es             →  "Descargar ficheros" → servicios REST al pie
+     └─ ambas redirigen a: sedeaplicaciones.minetur.gob.es
+```
+
+El Portal 2 (geoportalgasolineras.es) tiene los mismos datos pero actualmente
+requiere autenticación para la descarga directa. Se usa solo Portal 1.
+
+### Endpoints MinETUR
+
+Todas las llamadas parten de la url base:
+https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes
+
+a la que se añade la ruta de cada servicio específico:
+```
+# Todas las estaciones terrestres (~11.000)
+GET /ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/
+
+# Filtro por municipio o carburante
+GET .../EstacionesTerrestresFiltradas/<idMunicipio>
+GET .../EstacionesTerrestresFiltradas/FiltroProducto/<idProducto>
+
+# Catálogos auxiliares
+GET .../Municipios/
+GET .../Productos/
+GET .../ComunidadesAutonomas/
+```
+
+### Formato de respuesta
+
+```json
+{
+  "Fecha": "26/05/2026",
+  "ListaEESSPrecio": [
+    {
+      "C.P.": "28001",
+      "Dirección": "CALLE MAYOR 1",
+      "Latitud": "40,416775",
+      "Longitud (WGS84)": "-3,703790",
+      "Rótulo": "REPSOL",
+      "IDCCAA": "13",
+      "Horario": "L-D: 07:00-22:00",
+      "Precio Gasolina 95 E5": "1,659",
+      "Precio Gasoleo A": "1,489"
     }
+  ]
 }
+```
 
- 3. Entendiendo lo que devuelve la API
+### Script de prueba
 
-  La API de MineTur devuelve algo así:
+`actividad3/api_test.dart` — script Dart standalone (sin Flutter) para inspeccionar
+las respuestas de la API desde línea de comandos:
 
-  {
-    "Fecha": "26/05/2026",
-    "ListaEESSPrecio": [
-      {
-        "C.P.": "28001",
-        "Dirección": "CALLE MAYOR 1",
-        "Latitud": "40,416775",
-        "Longitud": "-3,703790",
-        "Rótulo": "REPSOL",
-        "Precio Gasolina 95 E5": "1,659",
-        "Precio Gasoil A": "1,489"
-      },
-      ...
-    ]
+```bash
+dart run api_test.dart # descarga completa (~11.000)
+```
+Devuelve el json de ejemplo de la sección anterior.
+Lógica:
+```
+  import 'dart:convert';
+  import 'dart:io';
+
+  const _url =
+      'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes'
+      '/PreciosCarburantes/EstacionesTerrestres/';
+
+  Future<void> main() async {
+    final client = HttpClient();
+    try {
+      final request  = await client.getUrl(Uri.parse(_url));
+      final response = await request.close();
+
+      if (response.statusCode != 200) {
+        print('Error HTTP ${response.statusCode}');
+        return;
+      }
+
+      final body = await response.transform(utf8.decoder).join();
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final lista = data['ListaEESSPrecio'] as List;
+
+      print('Fecha: ${data['Fecha']}');
+      print('Total estaciones: ${lista.length}');
+      print('\nPrimer registro:');
+      (lista.first as Map<String, dynamic>)
+          .forEach((k, v) => print('  "$k": "$v"'));
+    } finally {
+      client.close();
+    }
   }
+```
 
-En Dart, después de jsonDecode, eso se convierte en:
-Map<String, dynamic> data = jsonDecode(response.body);
-List<dynamic> stations = data['ListaEESSPrecio'];
+---
 
-// accede una estación
-Map<String, dynamic> first = stations[0];
-print(first['Rótulo']);
-print(first['Dirección']);
+## 2. Arquitectura
 
-4. Creando una model class
+### Capas
 
-En lugar de trabajar con Map<String, dynamic> crudo, los mapeamos a clases Dart:
-class GasStation{
-  final String name;
-  final String address;
-  final String postalCode;
-  final double latitude;
-  final double longitude;
-  final Strint? priceGasolina95; // ? es nullable
-  final String? priceGasoilA;
-  
-  GasStation({
-    required this.name,
-    required this.address,
-    required this.postalCode,
-    required this.latitude,
-    required this.longitude,
-    required this.priceGasolina95,
-    required this.priceGasoilA,
+```
+StationListScreen
+     │
+     └─ SyncService          ← orquestador local-primero (caché o API)
+          ├─ DatabaseService  ← SQLite, persistencia entre sesiones
+          └─ MineTurService   ← API REST del Ministerio
+```
+
+La pantalla no habla directamente con la API ni con la BD sino con un servicio intermedio
+SyncService, que decide de dónde vienen los datos.
+
+### Modelo de datos (SQLite)
+
+```
+┌─────────────────────┐         ┌───────────────────────────────┐
+│  ComunidadAutonoma  │         │           stations            │
+│─────────────────────│         │───────────────────────────────│
+│ id_ccaa  TEXT  PK   │──1───N─▶│ id               INTEGER PK   │
+│ nombre   TEXT       │         │ name             TEXT         │
+└─────────────────────┘         │ address          TEXT         │
+                                │ municipality     TEXT         │
+┌─────────────────────┐         │ postal_code      TEXT         │
+│      Municipio      │         │ latitude         REAL         │
+│─────────────────────│──1───N─▶│ longitude        REAL         │
+│ municipality TEXT   │         │ price_gasolina95 REAL         │
+└─────────────────────┘         │ price_gasoil_a   REAL         │
+                                │ id_ccaa          TEXT  FK     │
+┌─────────────────────┐         └───────────────────────────────┘
+│        meta         │
+│─────────────────────│
+│ key    TEXT  PK     │  ← solo contiene 'last_sync'
+│ value  TEXT         │
+└─────────────────────┘
+```
+
+### Ficheros principales
+
+```
+main.dart                      — punto de entrada; tema verde; arranca SplashScreen
+screens/
+  splash_screen.dart           — presentación animada, navega a StationListScreen
+  station_list_screen.dart     — pantalla principal: GPS, filtros, lista, detalle
+models/
+  gas_station.dart             — modelo de datos; factory fromJson; precios double?
+services/
+  minetur_service.dart         — llamadas HTTP; parsea ~11.000 estaciones
+  database_service.dart        — SQLite (sqflite); schema v3; batch insert
+  sync_service.dart            — estrategia local-primero; record Dart 3
+```
+
+---
+
+## 3. Modelos
+
+### GasStation (`lib/models/gas_station.dart`)
+
+Se ha definido la clase GasStation para gestionar los datos de la entidad,
+a partir de la información que nos ha interesado capturar de la respuesta API:
+```
+name, address, municipality, postalCode  — datos de la estación
+horario          String?                 — horario de apertura; nullable
+latitude, longitude  double              — coordenadas WGS84
+priceGasolina95, priceGasoilA  double?  — null si no vende ese carburante
+idCcaa           String                 — ID de Comunidad Autónoma (01–19)
+distanceKm       double?                — calculado en runtime, no viene de la API
+```
+
+En caso de que quisieramos ampliar la funcionalidad de la App Flutter, empezaríamos añadiendo
+al modelo de datos, los campos necesarios.
+Los servicios de esta API tienen información sobre Puntos de Recarga electricos o Postes Marítimos,
+ además de otros tipos de carburantes.
+
+Lógica:
+```
+  class GasStation {
+    final String  name;
+    final String  address;
+    final String  municipality;
+    final String  postalCode;
+    final String? horario;
+    final double  latitude;
+    final double  longitude;
+    final String  idCcaa;
+    final double? priceGasolina95;
+    final double? priceGasoilA;
+    double?       distanceKm;
+
+    GasStation({
+      required this.name,
+      required this.address,
+      required this.municipality,
+      required this.postalCode,
+      required this.latitude,
+      required this.longitude,
+      required this.idCcaa,
+      this.horario,
+      this.priceGasolina95,
+      this.priceGasoilA,
+      this.distanceKm,
     });
-  // API envia "40,416775"(coma) -> convertimos a double
-  static double _parseCoord(String s) => 
-    double.parse(s.replaceAll(',','.'));
-  // Named constructor: construye GasStation desde el raw API map
-  factory GasStation.fromJson(Map<String, dynamic> json){
-    return GasStation(
-       name: json['Rótulo'] ?? '',
-       name: json['Dirección'] ?? '',
-       name: json['C.P.'] ?? '',
-       name: _parseCoord(json['Latitud'] ?? '0'),
-       name: _parseCoord(json['Longitud (wGS84)'] ?? '0'),
-       name: json['Precio Gasolina 95 ES'] ?? '',
-       name: json['Precio GasoilA'] ?? '',
+
+    static double? _parsePrice(String? s) =>
+        (s == null || s.trim().isEmpty) ? null : double.tryParse(s.replaceAll(',', '.'));
+
+    static double _parseCoord(String s) =>
+        double.tryParse(s.replaceAll(',', '.')) ?? 0.0;
+
+    factory GasStation.fromJson(Map<String, dynamic> json) => GasStation(
+      name:            json['Rótulo']            ?? '',
+      address:         json['Dirección']         ?? '',
+      municipality:    json['Municipio']         ?? '',
+      postalCode:      json['C.P.']              ?? '',
+      horario:         json['Horario'],
+      latitude:        _parseCoord(json['Latitud']          ?? '0'),
+      longitude:       _parseCoord(json['Longitud (WGS84)'] ?? '0'),
+      idCcaa:          json['IDCCAA']            ?? '',
+      priceGasolina95: _parsePrice(json['Precio Gasolina 95 E5']),
+      priceGasoilA:    _parsePrice(json['Precio Gasoleo A']),
     );
-   }
+  }
+```
+
+Funciones de conversión:
+
+```dart
+_parsePrice("1,659")      → 1.659   // coma → punto; null si vacío
+_parseCoord("40,416775")  → 40.416775
+```
+
+`factory GasStation.fromJson()` mapea los nombres exactos de la API:
+`'Rótulo'`, `'Dirección'`, `'Latitud'`, `'Longitud (WGS84)'`, `'IDCCAA'`,
+`'Horario'` (H mayúscula), `'Precio Gasolina 95 E5'`, `'Precio Gasoleo A'` (no "Gasoil").
+
+---
+
+## 4. Servicios y persistencia
+
+### MineTurService (`lib/services/minetur_service.dart`)
+
+Descarga el volcado completo de `EstacionesTerrestres/` y devuelve
+`List<GasStation>` parseando el array `'ListaEESSPrecio'`.
+
+### DatabaseService (`lib/services/database_service.dart`)
+
+Singleton (constructor privado + `static final instance`).
+Base de datos: `gas_around.db`.
+
+Evolución del schema:
+
+```
+v1 — columnas básicas; price_gasolina95 y price_gasoil_a como TEXT
+v2 — precios cambian a REAL para poder ordenar numéricamente
+v3 — añade id_ccaa TEXT para filtro por comunidad autónoma
+```
+
+`onUpgrade`: borra y recrea `stations` (migración destructiva aceptable; los datos
+vienen de la API y se re-descargan). `meta` no se toca entre versiones.
+
+Métodos principales:
+
+```
+seedStations(List<GasStation>)      — batch insert (~11.000 filas)
+getAllStations()                     — todas las estaciones
+getDistinctCcaa()                   — IDs de CCAA presentes en la BD
+getMunicipiosByCcaa(idCcaa)         — municipios de esa CCAA, orden alfabético
+getStationsByMunicipio(municipio)   — estaciones de un municipio
+```
+
+> `horario` no se persiste todavía (schema v4 pendiente). Cuando los datos
+> vienen de caché, `horario` siempre es `null`.
+
+### SyncService (`lib/services/sync_service.dart`)
+
+Singleton. Estrategia local-primero:
+
+```
+1. BD vacía (primer arranque)  → API completa → persiste en SQLite
+2. Datos recientes (< 24h)     → SQLite directamente
+3. Datos caducados (> 24h)     → SQLite + refresh en background
+```
+
+Retorna record Dart 3: `({List<GasStation> stations, bool isSyncing})`
+`isSyncing=true` solo en el caso 3, para que la UI muestre el indicador.
+El callback `onSyncComplete` notifica cuando el background refresh termina.
+
+---
+
+## 5. Pantallas
+
+### SplashScreen (`lib/screens/splash_screen.dart`)
+
+Pantalla de presentación: fondo verde, icono + nombre + subtítulo.
+Fade-in de 800ms con `AnimationController` + `CurvedAnimation`.
+Navega a `StationListScreen` tras 3s con `pushReplacement`
+(`pushReplacement` evita que "atrás" vuelva al splash).
+
+### StationListScreen (`lib/screens/station_list_screen.dart`)
+
+Pantalla principal. Variables de estado:
+
+```
+_allStations        — estaciones con distancia calculada
+_loading            — muestra spinner mientras carga
+_syncing            — muestra LinearProgressIndicator en el AppBar
+_error              — texto de error si algo falla
+_filter             — FuelFilter: all | gasolina95 | gasoilA
+_zoneMode           — true cuando la lista viene del filtro de zona (sin GPS)
+_ccaaIds            — IDs de CCAA presentes en la BD
+_selectedCcaa       — CCAA activa (null = ninguna)
+_municipios         — municipios de la CCAA seleccionada
+_selectedMunicipio  — municipio activo (null = ninguno)
+```
+
+Modos de carga:
+
+```
+GPS (FAB "Buscar cerca")  → distancias calculadas, muestra 7 resultados
+Zona (CCAA + municipio)   → sin GPS, muestra 20 resultados
+```
+
+Filtros de carburante (`_filteredStations` getter):
+parte de las 50 más cercanas como universo para no mostrar las más baratas
+de toda España; ordena por precio ascendente dentro de ese subconjunto.
+
+Barra de filtros (3 filas):
+
+```
+Fila 1 — chips: Distancia | Gasolina 95 | Gasoleo A
+Fila 2 — chips de CCAA (carrusel horizontal, solo si hay datos en la BD)
+Fila 3 — dropdown de municipios (solo si hay CCAA seleccionada)
+```
+
+BottomSheet de detalle (`_showDetail`):
+nombre, dirección, horario (si existe), precios, distancia, botón "Cómo llegar".
+
+Navegación a Maps (`_openInMaps`):
+URI `geo:LAT,LON?q=LAT,LON(Nombre)` vía `url_launcher`.
+`AndroidManifest.xml` declara intent `geo:` en `<queries>`.
+Si no hay app de mapas instalada, muestra `SnackBar` de aviso.
+
+---
+
+## 6. Build y distribución
+
+### Firma del APK
+
+```bash
+# Generar keystore (una sola vez)
+keytool -genkey -v -keystore ~/gas_around.jks \
+        -keyalg RSA -keysize 2048 -validity 10000 -alias gas_around
+```
+
+`android/key.properties` (excluido de git — nunca subir):
+
+```
+storeFile=/home/serpiko/gas_around.jks
+storePassword=<contraseña>
+keyAlias=gas_around
+keyPassword=<contraseña>
+```
+
+`android/app/build.gradle.kts` lee el fichero con Kotlin DSL:
+
+```kotlin
+import java.util.Properties
+val keyProperties = Properties()
+keyProperties.load(rootProject.file("key.properties").inputStream())
+// usar keyProperties.getProperty("key"), no keyProperties["key"]
+```
+
+```bash
+flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
+```
+
+Si hay una versión debug instalada, desinstalar antes:
+
+```bash
+adb -s <device-id> uninstall es.unir.gas_around
+```
+
+### Publicación en GitHub Releases
+
+```bash
+gh release create v1.0.0 GasAround-v1.0.0.apk \
+    --repo serpiko/Unir_practicas \
+    --title "GasAround v1.0.0"
+```
+
+Publicado en: https://github.com/serpiko/Unir_practicas/releases/tag/v1.0.0
+
+Instalación: activar "Fuentes desconocidas" una sola vez en el dispositivo.
+Requiere conexión en el primer arranque; offline después.
+
+---
+
+## 7. Conceptos Dart/Flutter
+
+### async/await
+
+Las llamadas de red y al GPS devuelven `Future`: una promesa de un valor
+que llegará más tarde. `async`/`await` permite escribirlas de forma lineal:
+
+```dart
+// async va después de los paréntesis (al contrario que Python)
+Future<void> _loadNearbyStations() async {
+  final position = await Geolocator.getCurrentPosition(...);
+  // aquí position ya tiene valor
 }
+```
 
-5. Lo unimos todo en una service class
+`await` pausa la función hasta que el `Future` se resuelva, sin bloquear el hilo UI.
 
-import 'package:http/http.dart' as http;
-import 'dart:convert'; // for jsonDecode
+`async` no hace las operaciones más rápidas — la red tarda lo que tarda.
+La diferencia es qué hace el hilo mientras espera:
 
-class MineturService{
-  static const _base =        
-'https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes';
-  Future<List<GasStation>> fetchAllStations() async{
-    final response = await http.get(Uri.parse('$_base/EstacionesTerrestres/'));
-    if ( response.statusCode != 200){
-       throw Exception('AP eror: ${response.statusCode}');
-    }
-    final data = jsonDecode(response.body);
-    final List<dynamic> list = data['ListaEESSPrecio'];
-    return list.map(json) => GasStation.fromJson(json)).toList();
-   }
-}
+```
+Sin async:   hilo ──── espera HTTP ──────────────────── continúa
+                        (hilo parado, no hace nada)
 
-Uso desde un widget u otro:
-final service = MineturService();
-final stations = await service.fetchAllStations();
-print('Found ${stations.length} stations');
-print(stations.first_name);
+Con async:   hilo ──── lanza petición ── libre ── respuesta ── continúa
+                                         (UI sigue respondiendo)
+```
 
-  Conceptos clave a recordar
+En Flutter esto es crítico: sin async el hilo de la UI se bloquea y la pantalla
+se congela. En un script CLI como `api_test.dart` el efecto es imperceptible,
+pero `HttpClient` de Dart solo existe en versión asíncrona, así que no hay opción.
 
-  ┌──────────────────────┬────────────────────────────────────────────────────┐
-  │       Concepto       │                   Qué significa                    │
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ Future<T>            │ Un valor de tipo T que llegará más tarde           │
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ async                │ Marca una función como asíncrona                   │
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ await                │ Espera aquí hasta que el Future se resuelva        │
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ Map<String, dynamic> │ Lo que devuelve jsonDecode — un diccionario        │
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ factory constructor  │ Constructor que instancia objeto desde datos crudos│
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ ??                   │ "Si es null, usa este valor por defecto"           │
-  ├──────────────────────┼────────────────────────────────────────────────────┤
-  │ ? en un tipo         │ El valor es opcional (puede ser null)              │
-  └──────────────────────┴────────────────────────────────────────────────────┘
+Cuando sí hay ganancia real en velocidad es lanzando varias operaciones en paralelo:
 
+```dart
+await Future.wait([fetchStations(), fetchMunicipios()]); // viajan a la vez
+```
 
+### El Widget como unidad de UI y lógica
 
-# Gestión del proyecto flutter
-flutter create --org es.unir gas_around
-flutter run // corre una app linux con un botón + y un campo contador
-flutter pub get // lee el archivo pubspec.yaml y descarga todos los paquetes declarados en dependencies desde el
-  repositorio público pub.dev.
-En nuestro caso descargará tres paquetes nuevos:
+En Flutter no hay separación entre capa visual y lógica como en Android XML + Activity.
+Un `StatefulWidget` tiene el estado (lógica) y el `build()` (UI) en el mismo objeto.
 
-  http: ^1.2.0           # cliente HTTP para llamar a la API REST
-  geolocator: ^13.0.0    # acceso al GPS del dispositivo
-  permission_handler: ^11.0.0  # solicitar permisos en tiempo de ejecución
+Ciclo de actualización:
 
-Además de los paquetes y sus dependencias a ~/.pub-cache/ que es una caché global para todas las apps fluter locales.
-Genera fichero pubspec.lock con las versiones exactas del proyecto.
-Crea .dart_tool/package_config.json con las rutas a cada paquete, necesario para el compilador.
+```
+acción del usuario
+     │
+     ▼
+setState(() { _loading = true; })   ← actualiza estado
+     │
+     ▼
+build() se ejecuta de nuevo         ← Flutter llama esto automáticamente
+     │
+     ▼
+_buildBody() devuelve el widget correcto según el estado
+     │
+     ▼
+Flutter compara árbol nuevo vs anterior y pinta solo lo que cambió
+```
 
-# ejecutar en dispositivo específico
-flutter run -d <device-id>
+Esta comparación (reconciliation) es barata: el árbol de widgets es
+una descripción en memoria, no el renderizado real.
 
-# Build APK
-flutter build apk
+Tres variantes:
 
-# ejecutar tests
-flutter test
+| Tipo | Estado | Ejemplo en GasAround |
+|---|---|---|
+| `StatelessWidget` | Ninguno (inmutable) | `_priceRow()` |
+| `StatefulWidget` | Propio, via `setState` | `StationListScreen` |
+| Widget "tonto" | Recibe datos del padre | `ListTile` |
 
-# ejecutar fichero de test
-flutter test test/widget_test.dart
+### mounted
 
-# análisis de código
-flutter analyze
+Un widget puede desaparecer del árbol mientras hay callbacks asíncronos pendientes.
+`mounted` es `true` mientras el widget vive en el árbol, `false` tras `dispose()`:
 
-# formateo de código
-dart format .
+```dart
+Future.delayed(duration, () {
+  if (mounted) {           // ¿sigue vivo el widget?
+    setState(() { ... });  // solo entonces toca el estado
+  }
+});
+```
 
+En `SplashScreen` evita llamar a `Navigator.pushReplacement` si el usuario
+abandonó la pantalla antes de que expiren los 3 segundos.
 
-# Diseño de Implementación
+### Tipos nullable (`String?`)
 
-3 módulos principales: screens · models · services
+`String?` significa "puede ser un `String` o `null`". Sin `?`, el compilador
+impide que la variable sea `null` en tiempo de compilación.
 
-  Arquitectura en capas:
+```dart
+String? _selectedCcaa;       // null = ninguna CCAA seleccionada
+String? _selectedMunicipio;  // null = ningún municipio seleccionado
+```
 
-  StationListScreen
-       │
-       └─ SyncService          ← orquestador local-primero (caché o API)
-            ├─ DatabaseService  ← SQLite, persistencia entre sesiones
-            └─ MineTurService   ← API REST del Ministerio
+`null` aquí no es un error — es un valor semántico: "el usuario no ha elegido nada".
+Conduce la UI directamente:
 
-  La pantalla nunca habla directamente con la API ni con la BD.
-  Solo conoce a SyncService, que decide de dónde vienen los datos.
+```dart
+if (_selectedCcaa != null && _municipios.isNotEmpty)
+  DropdownButton(...)  // solo visible si hay CCAA seleccionada
+```
 
-  DER — modelo de datos (SQLite):
+---
 
-                                  ┌───────────────────────────────┐
-  ┌─────────────────────┐         │           stations            │
-  │  ComunidadAutonoma  │────────▶│───────────────────────────────│
-  │─────────────────────│ 1    N  │ id               INTEGER PK   │
-  │ id_ccaa  TEXT  PK   │         │ name             TEXT         │
-  │ nombre   TEXT       │         │ address          TEXT         │
-  └─────────────────────┘         │ municipality     TEXT         │
-                                  │ postal_code      TEXT         │
-                           1    N │ latitude         REAL         │
-  ┌─────────────────────┐         │ longitude        REAL         │
-  │      Municipio      │────────▶│ price_gasolina95 REAL         │
-  │─────────────────────│         │ price_gasoil_a   REAL         │
-  │ municipality TEXT   │         │ id_ccaa          TEXT  FK     │
-  └─────────────────────┘         └───────────────────────────────┘
+## Comandos habituales
 
-  ┌─────────────────────┐
-  │        meta         │
-  │─────────────────────│
-  │ key    TEXT  PK     │   ← solo contiene 'last_sync'
-  │ value  TEXT         │
-  └─────────────────────┘
+```bash
+flutter run -d <device-id>          # ejecutar en dispositivo específico
+flutter build apk --release         # build release
+flutter test                        # todos los tests
+flutter test test/widget_test.dart  # test concreto
+flutter analyze                     # análisis estático
+dart format .                       # formatear código
+dart run api_test.dart estaciones # script de prueba de la API
+adb devices                         # listar dispositivos conectados
+adb -s <id> install app-release.apk
+```
 
-  ComunidadAutonoma no es una tabla SQLite — sus nombres están hardcodeados
-  en _ccaaNames (station_list_screen.dart) y se cruzan con id_ccaa de stations.
-  Municipio tampoco es tabla: se obtiene con SELECT DISTINCT municipality.
+## Depuración en dispositivo
 
-  Ficheros principales:
-
-  main.dart               — punto de entrada; tema verde; arranca SplashScreen
-  screens/
-    splash_screen.dart    — presentación animada, navega a StationListScreen tras 3s
-    station_list_screen.dart — GPS → distancias → filtros por carburante
-  models/
-    gas_station.dart      — modelo de datos; factory fromJson; precios como double?
-  services/
-    minetur_service.dart  — llamadas HTTP a la API; parsea el JSON de ~11.000 estaciones
-    database_service.dart — SQLite (sqflite); schema v3; batch insert; tabla meta con last_sync
-    sync_service.dart     — estrategia local-primero; devuelve record Dart 3 (stations, isSyncing)
-
-
-# Gestión de estado del widget: mounted
-
-  En Flutter, un widget puede desaparecer del árbol mientras hay callbacks asíncronos pendientes
-  (timers, Futures, animaciones). Usar context o setState sobre un widget ya destruido lanza excepción.
-
-  mounted es una propiedad de State que vale true mientras el widget vive en el árbol
-  y false en cuanto se llama a dispose(). El patrón estándar:
-
-  Future.delayed(duration, () {
-    if (mounted) {          // ¿sigue vivo el widget?
-      setState(() { ... }); // solo entonces toca el estado o el context
-    }
-  });
-
-  En SplashScreen se usa para evitar llamar a Navigator.pushReplacement si el usuario
-  abandonó la pantalla antes de que expiren los 3 segundos del temporizador.
-
-# Capa de Datos local
-Las APIs propuestas para esta práctica son muy inestables
-
-# Depuración en dispositivo android conectado y con modo desarrollador activado
-
-flutter devices  
-Found 3 connected devices:
+```
+flutter devices
   Aquaris X2 Pro (mobile) • XV009147 • android-arm64  • Android 10 (API 29)
-  Linux (desktop)         • linux    • linux-x64      • Ubuntu 24.04.4 LTS 6.8.0-117-generic
-  Chrome (web)            • chrome   • web-javascript • Google Chrome 148.0.7778.178
+  Linux (desktop)         • linux    • linux-x64
+  Chrome (web)            • chrome   • web-javascript
 
-El nuestro es el viejo Aquarix X2, la compilación tarda unos 2 minutos
-```
 flutter run -d XV009147
-Launching lib/main.dart on Aquaris X2 Pro in debug mode...
-Running Gradle task 'assembleDebug'...                  
 ```
 
+La compilación en el Aquaris X2 tarda ~2 minutos.
