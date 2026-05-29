@@ -14,6 +14,7 @@ class GasAroundApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'GasAround',
+      debugShowCheckedModeBanner: false,
       // Tema visual de la app basado en un color semilla verde
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
