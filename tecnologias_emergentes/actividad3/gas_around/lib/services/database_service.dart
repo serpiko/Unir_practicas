@@ -28,7 +28,7 @@ class DatabaseService {
     final path = join(dbPath, _dbName);
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       // onUpgrade borra y recrea stations para aplicar cambios de esquema
       // meta no se toca: persiste entre versiones
@@ -67,7 +67,8 @@ class DatabaseService {
         longitude        REAL,
         price_gasolina95 REAL,
         price_gasoil_a   REAL,
-        id_ccaa          TEXT
+        id_ccaa          TEXT,
+        horario          TEXT
       )
     ''');
   }
@@ -91,6 +92,7 @@ class DatabaseService {
         'price_gasolina95': s.priceGasolina95,
         'price_gasoil_a':   s.priceGasoilA,
         'id_ccaa':          s.idCcaa,
+        'horario':          s.horario,
       });
     }
 
@@ -147,6 +149,7 @@ class DatabaseService {
     idCcaa:           row['id_ccaa'] as String? ?? '',
     priceGasolina95:  row['price_gasolina95'] as double?,
     priceGasoilA:     row['price_gasoil_a'] as double?,
+    horario:          row['horario'] as String?,
   );
 
   Future<bool> isEmpty() async {
