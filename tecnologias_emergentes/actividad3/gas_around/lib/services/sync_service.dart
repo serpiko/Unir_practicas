@@ -17,8 +17,6 @@ class SyncService {
   static const _maxAgeHours = 24;
 
   // Punto de entrada principal para la pantalla de gasolineras
-  //
-  // Devuelve un record de Dart 3: (stations, isSyncing)
   //   isSyncing = true  → se lanzó un refresh en background (datos caducados)
   //   isSyncing = false → los datos locales son frescos, no hay sync activo
   //
