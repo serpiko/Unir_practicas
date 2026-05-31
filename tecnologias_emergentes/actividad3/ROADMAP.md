@@ -68,7 +68,7 @@ las respuestas de la API desde bash:
 dart run api_test.dart # descarga completa (~11.000)
 ```
 Devuelve el json de ejemplo de la sección anterior.
-Lógica:
+Una complejidad inicial al hacer peticiones a una API es que el paquete HttpClient() sólo trabaja en async, por suerte el funcionamiento es similar a python, bastante  familiar.
 ```
   import 'dart:convert';
   import 'dart:io';
@@ -136,6 +136,7 @@ SyncService, que decide de dónde vienen los datos.
 │ municipality TEXT   │         │ price_gasolina95 REAL         │
 └─────────────────────┘         │ price_gasoil_a   REAL         │
                                 │ id_ccaa          TEXT  FK     │
+                                │ horario          TEXT         │
 ┌─────────────────────┐         └───────────────────────────────┘
 │        meta         │
 │─────────────────────│
@@ -283,7 +284,7 @@ class MineTurService {
 
 ### DatabaseService (`lib/services/database_service.dart`)
 
-Capa de persistencia local. Gestiona la base de datos SQLite `gas_around.db`
+Capa de persistencia local que gestiona la base de datos SQLite `gas_around.db`
 mediante el paquete `sqflite`, actuando como caché entre sesiones para que la app
 funcione sin conexión tras la primera carga. 
 Implementa el patrón Singleton para garantizar que toda la app comparte una única conexión a la base de datos.
@@ -403,16 +404,11 @@ getMunicipiosByCcaa(idCcaa)         — municipios de esa CCAA, orden alfabétic
 getStationsByMunicipio(municipio)   — estaciones de un municipio
 ```
 
-> Esquema v4: columna `horario TEXT` añadida. `seedStations`, `_rowToStation`
-> y `_createStationsTable` actualizados. `onUpgrade` re-crea `stations` al detectar v3.
-
 ### SyncService (`lib/services/sync_service.dart`)
 
-Orquestador de la estrategia local-primero. Su responsabilidad es decidir en cada
-consulta de dónde provienen los datos, de forma que la pantalla siempre recibe
-una respuesta inmediata sin preocuparse por el estado de la red. Para ello combina
-`DatabaseService` y `MineTurService` aplicando tres casos según la antigüedad
-de los datos almacenados:
+Este servicio gestiona la sincronización periódica entre los datos de la API y la capa de persistencia local ( sqlite3). 
+De esta forma mejora la funcionalidad de la app, ya que se ha reportado bastantes problemas de estabilidad con las APIs en uso. 
+A bajo nivel se combina `DatabaseService` y `MineTurService`.
 
 ```
 1. BD vacía (primer arranque)  → descarga API completa → persiste en SQLite
@@ -420,10 +416,8 @@ de los datos almacenados:
 3. Datos caducados (> 24h)     → devuelve SQLite + lanza refresh en background
 ```
 
-En el caso 3 el refresh se ejecuta sin bloquear la UI: la pantalla recibe los datos
-locales de inmediato y se actualiza sola cuando la descarga termina, a través del
-callback `onSyncComplete`. Si la API falla, el error se absorbe silenciosamente y
-los datos locales siguen siendo válidos.
+En el caso 3 la actualización no bloquea la UI, ya que  la pantalla recibe los datos locales de inmediato y se actualiza sólo cuando la descarga ha terminado,  mediante el callback `onSyncComplete`. 
+Por otro lado, si la API falla, el error se absorbe silenciosamente y los datos locales siguen siendo válidos.
 
 
 ```dart
@@ -476,10 +470,8 @@ class SyncService {
 
 ### SplashScreen (`lib/screens/splash_screen.dart`)
 
-Pantalla de presentación: fondo verde, icono + nombre + subtítulo.
-Fade-in de 800ms con `AnimationController` + `CurvedAnimation`.
-Navega a `StationListScreen` tras 3s con `pushReplacement`
-(`pushReplacement` evita que "atrás" vuelva al splash).
+Es la primera pantalla de la app, mostrando el título por un instante antes de hacer transición a la pantalla principal de `StationListScreen`.
+Hay un difuminado básico de 800ms con `AnimationController` + `CurvedAnimation` previo a la transición a `StationListScreen` tras 3s con `pushReplacement` ( evita que "atrás" vuelva al splash).
 
 ```dart
 class SplashScreen extends StatefulWidget {
@@ -488,7 +480,7 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-// SingleTickerProviderStateMixin: proporciona el vsync que necesita AnimationController
+// SingleTickerProviderStateMixin: proporciona el vsync para AnimationController
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
@@ -551,7 +543,14 @@ class _SplashScreenState extends State<SplashScreen>
 
 ### StationListScreen (`lib/screens/station_list_screen.dart`)
 
-Pantalla principal. Variables de estado:
+Pantalla principal y núcleo de la aplicación. Implementa dos modos de consulta
+independientes: por proximidad GPS, que ordena las estaciones por distancia al
+usuario, y por zona geográfica, que permite navegar por Comunidad Autónoma y
+municipio sin necesidad de activar la localización. El estado de la pantalla
+concentra tanto los datos mostrados como el modo activo en cada momento,
+de forma que `build()` construye la interfaz correcta según la combinación
+de variables en cada instante. 
+Variables de estado:
 
 ```
 _allStations        — estaciones con distancia calculada
@@ -891,11 +890,11 @@ una descripción en memoria, no el renderizado real.
 
 Tres variantes:
 
-| Tipo | Estado | Ejemplo en GasAround |
-|---|---|---|
-| `StatelessWidget` | Ninguno (inmutable) | `_priceRow()` |
-| `StatefulWidget` | Propio, via `setState` | `StationListScreen` |
-| Widget "tonto" | Recibe datos del padre | `ListTile` |
+| Tipo              | Estado                 | Ejemplo en GasAround |
+| ----------------- | ---------------------- | -------------------- |
+| `StatelessWidget` | Ninguno (inmutable)    | `_priceRow()`        |
+| `StatefulWidget`  | Propio, via `setState` | `StationListScreen`  |
+| Widget "tonto"    | Recibe datos del padre | `ListTile`           |
 
 ### mounted
 

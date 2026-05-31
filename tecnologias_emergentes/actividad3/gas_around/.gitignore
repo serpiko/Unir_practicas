@@ -46,6 +46,7 @@ app.*.map.json
 
 # Rutas locales de la máquina de desarrollo
 /android/local.properties
+/android/key.properties
 
 # Boilerplate Android — sistema de build, se regenera con Flutter
 /android/gradlew
