@@ -468,6 +468,43 @@ class SyncService {
 
 ## 5. Pantallas
 
+### Widgets y gestión de estado en Flutter
+
+En Flutter toda la interfaz se construye como un árbol de widgets. Cada elemento
+visual — un botón, un texto, un icono, una pantalla entera — es un widget. La clave
+del modelo reactivo de Flutter es que los widgets no se modifican directamente:
+cuando el estado cambia, Flutter descarta el widget actual y construye uno nuevo
+a partir del estado actualizado.
+
+Las pantallas de esta app son `StatefulWidget`, lo que significa que mantienen
+estado mutable a lo largo de su ciclo de vida. El estado se almacena en variables
+de instancia (prefijadas con `_` para marcarlas como privadas) y se actualiza
+siempre a través de `setState()`, que indica a Flutter que debe reconstruir
+el árbol visual:
+
+```dart
+setState(() {
+  _loading = true;   // actualiza el estado
+});
+// Flutter llama a build() automáticamente → la UI refleja el nuevo estado
+```
+
+El método `build()` es puro: no modifica nada, solo describe la interfaz en función
+del estado actual. Para mantenerlo legible, la lógica de construcción se delega en
+métodos auxiliares con el prefijo `_build`:
+
+```
+build()
+  └─ _buildBody()       ← decide qué vista mostrar según el estado
+       ├─ _buildFilterBar()  ← barra de filtros
+       └─ _buildList()       ← lista de resultados
+```
+
+Este patrón separa la decisión de qué mostrar (`_buildBody`) de cómo mostrarlo
+(`_buildFilterBar`, `_buildList`), sin necesidad de introducir librerías externas
+de gestión de estado. Para una app de este alcance, `setState` es suficiente
+y mantiene el código directo y fácil de seguir.
+
 ### SplashScreen (`lib/screens/splash_screen.dart`)
 
 Es la primera pantalla de la app, mostrando el título por un instante antes de hacer transición a la pantalla principal de `StationListScreen`.
@@ -763,10 +800,13 @@ nombre, dirección, horario (si existe), precios, distancia, botón "Cómo llega
 
 <!-- CAPTURA: BottomSheet abierto mostrando detalle de una gasolinera -->
 
-Navegación a Maps (`_openInMaps`):
-URI `geo:LAT,LON?q=LAT,LON(Nombre)` vía `url_launcher`.
-`AndroidManifest.xml` declara intent `geo:` en `<queries>`.
-Si no hay app de mapas instalada, muestra `SnackBar` de aviso.
+La navegación a la gasolinera seleccionada se delega en el sistema operativo
+mediante el paquete `url_launcher`. Se construye una URI con el esquema `geo:`
+que Android resuelve automáticamente contra cualquier app de mapas instalada
+(Google Maps, Waze, etc.), sin acoplar la app a ninguna en concreto. Para que
+Android autorice esta consulta es necesario declarar el intent `geo:` en el
+bloque `<queries>` de `AndroidManifest.xml`. Si el dispositivo no tiene ninguna
+app de mapas instalada, se muestra un `SnackBar` informando al usuario.
 
 ---
 
