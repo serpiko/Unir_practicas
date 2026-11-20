@@ -231,8 +231,14 @@ def main():
          0.50, -0.900, 0.0,   0.85, 0.15, 0.15,
          0.40, -0.900, 0.0,   0.85, 0.15, 0.15,
          0.30, -0.900, 0.0,   0.85, 0.15, 0.15,
-        -0.30, -0.900, 0.0, 0.85, 0.15, 0.15,
-        -0.40, -0.800, 0.0, 0.15, 0.15, 0.15
+        -0.50, -0.900, 0.0,   0.85, 0.15, 0.15   # esquina trasera inferior: cierre vertical
+    ]
+
+    # Datos de los vértices de las ruedas del coche.
+    # Cada rueda es un único vértice (x, y, z, r, g, b) que se dibuja como un punto grande.
+    wheel_vertices = [
+        -0.30, -0.900, 0.0,   0.10, 0.10, 0.10,   # rueda trasera
+         0.30, -0.900, 0.0,   0.10, 0.10, 0.10    # rueda delantera
     ]
 
     # Se crean y configuran los recursos necesarios para dibujar cada objeto.
@@ -245,6 +251,7 @@ def main():
     )
 
     car_vao, car_vbo, car_vertex_count = create_object_vao(car_vertices)
+    wheel_vao, wheel_vbo, wheel_vertex_count = create_object_vao(wheel_vertices)
 
     # Bucle principal de renderizado.
     # Se ejecuta una vez por cada frame hasta que el usuario cierre la ventana.
@@ -292,6 +299,14 @@ def main():
         # llamada de dibujo
         glDrawArrays(GL_LINE_LOOP, 0, car_vertex_count)
 
+        # Dibujo 2: Ruedas
+        glBindVertexArray(wheel_vao)
+        glPointSize(30)
+        glDrawArrays(GL_POINTS, 0, wheel_vertex_count)
+        #glLineWidth(6.0)
+        #glDrawArrays(GL_LINE_LOOP, 0, wheel_vertex_count)
+
+
         # Se intercambian los buffers.
         glfw.swap_buffers(window)
 
@@ -299,9 +314,11 @@ def main():
     glDeleteVertexArrays(1, [triangle_vao])
     glDeleteVertexArrays(1, [pentagon_vao])
     glDeleteVertexArrays(1, [car_vao])
+    glDeleteVertexArrays(1, [wheel_vao])
     glDeleteBuffers(1, [triangle_vbo])
     glDeleteBuffers(1, [pentagon_vbo])
     glDeleteBuffers(1, [car_vbo])
+    glDeleteBuffers(1, [wheel_vbo])
     glDeleteProgram(shader_program)
 
     # Se finaliza GLFW y se liberan los recursos asociados a la ventana
