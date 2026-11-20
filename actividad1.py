@@ -230,7 +230,9 @@ def main():
          0.55, -0.710, 0.0,   0.85, 0.15, 0.15,
          0.50, -0.900, 0.0,   0.85, 0.15, 0.15,
          0.40, -0.900, 0.0,   0.85, 0.15, 0.15,
-         0.30, -0.900, 0.0,   0.85, 0.15, 0.15
+         0.30, -0.900, 0.0,   0.85, 0.15, 0.15,
+        -0.30, -0.900, 0.0, 0.85, 0.15, 0.15,
+        -0.40, -0.800, 0.0, 0.15, 0.15, 0.15
     ]
 
     # Se crean y configuran los recursos necesarios para dibujar cada objeto.
@@ -288,7 +290,7 @@ def main():
         glBindVertexArray(car_vao)
         glLineWidth(5.0)
         # llamada de dibujo
-        glDrawArrays(GL_LINE_STRIP, 0, car_vertex_count)
+        glDrawArrays(GL_LINE_LOOP, 0, car_vertex_count)
 
         # Se intercambian los buffers.
         glfw.swap_buffers(window)
