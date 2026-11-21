@@ -206,18 +206,14 @@ def create_wheel_vertices(center_x:float, center_y:float, radius:float, center_c
 #        angle = 2*math.pi*i/segments
 #        vertices +=[center_x, center_y, *rim_color ]
 
+    aspect_ratio = WINDOW_HEIGHT / WINDOW_WIDTH
     for i in range(segments + 1):
-        aspect_ratio = WINDOW_HEIGHT/WINDOW_WIDTH
         angle = 2 * math.pi * i / segments
-        # 0.75 = 600 / 800: compensa que la ventana es más ancha que alta.
-        #x = center_x + radius * 0.75 * math.cos(angle)
         x = center_x + radius * aspect_ratio * math.cos(angle)
         y = center_y + radius * math.sin(angle)
         vertices += [x, y, 0.0, *rim_color]
 
     return vertices
-
-
 
 
 
@@ -268,18 +264,37 @@ def main():
         -0.50, -0.900, 0.0,   *car_color
     ]
 
-    # Datos de los vértices de las ruedas del coche.
-    # Cada rueda es un único vértice (x, y, z, r, g, b) que se dibuja como un punto grande.
-#    wheel_vertices = [
-#        -0.30, -0.900, 0.0,   0.10, 0.10, 0.10,   # rueda trasera
-#         0.30, -0.900, 0.0,   0.10, 0.10, 0.10    # rueda delantera
-#    ]
     # Vértices de las ruedas:centro gris, borde negro
     center_color = [0.5, 0.5, 0.5]
     rim_color = [0.05,0.05,0.05]
     rear_wheel_vertices = create_wheel_vertices(-0.30, -0.90, 0.06, center_color, rim_color)
     front_wheel_vertices = create_wheel_vertices(0.30, -0.90, 0.06, center_color, rim_color)
 
+    # Datos de los vértices del asfalto: rectángulo con GL_TRIANGLE_STRIP.
+    # 4 vértices en ZIGZAG: cada vértice nuevo forma un triángulo con los 2 anteriores.
+    #   v2 ──────── v3      triángulo 1: v0, v1, v2
+    #   │  ╲         │      triángulo 2: v1, v2, v3
+    #   v0 ──────── v1
+    road_color = [0.30, 0.30, 0.30]
+    road_vertices = [
+        -1.0, -1.00, 0.0,   *road_color,   # v0 abajo izquierda
+         1.0, -1.00, 0.0,   *road_color,   # v1 abajo derecha
+         1.0, -0.96, 0.0,   *road_color,    # v3 arriba derecha
+        - 1.0, -0.96, 0.0, *road_color  # v2 arriba izquierda
+    ]
+
+    # Datos de los vértices de las marcas viales: cada par de vértices es un segmento.
+    road_line_color = [1.0, 1.0, 1.0]
+    road_line_vertices = [
+        -0.90, -0.98, 0.0, *road_line_color,   -0.78, -0.98, 0.0, *road_line_color,
+        -0.65, -0.98, 0.0, *road_line_color,   -0.53, -0.98, 0.0, *road_line_color,
+        -0.40, -0.98, 0.0, *road_line_color,   -0.28, -0.98, 0.0, *road_line_color,
+        -0.15, -0.98, 0.0, *road_line_color,   -0.03, -0.98, 0.0, *road_line_color,
+         0.10, -0.98, 0.0, *road_line_color,    0.22, -0.98, 0.0, *road_line_color,
+         0.35, -0.98, 0.0, *road_line_color,    0.47, -0.98, 0.0, *road_line_color,
+         0.60, -0.98, 0.0, *road_line_color,    0.72, -0.98, 0.0, *road_line_color,
+         0.85, -0.98, 0.0, *road_line_color,    0.97, -0.98, 0.0, *road_line_color
+    ]
     # Se crean y configuran los recursos necesarios para dibujar cada objeto.
     # Cada objeto dispone de su propio VAO y VBO.
     mountain_vao, mountain_vbo, mountain_vertex_count = create_object_vao(
@@ -292,6 +307,9 @@ def main():
     car_vao, car_vbo, car_vertex_count = create_object_vao(car_vertices)
     rear_wheel_vao, rear_wheel_vbo, rear_wheel_vertex_count = create_object_vao(rear_wheel_vertices)
     front_wheel_vao, front_wheel_vbo, front_wheel_vertex_count = create_object_vao(front_wheel_vertices)
+
+    road_vao, road_vbo, road_vertex_count = create_object_vao(road_vertices)
+    road_line_vao, road_line_vbo, road_line_vertex_count = create_object_vao(road_line_vertices)
 
     # Bucle principal de renderizado.
     # Se ejecuta una vez por cada frame hasta que el usuario cierre la ventana.
@@ -332,6 +350,14 @@ def main():
         # también el último vértice con el primero.
         glDrawArrays(GL_LINE_LOOP, 0, sun_vertex_count)
 
+        # Dibujo 3: Carretera
+        glBindVertexArray(road_vao)
+        glDrawArrays(GL_TRIANGLE_FAN, 0, road_vertex_count)
+
+        glBindVertexArray(road_line_vao)
+        glLineWidth(2.0)
+        glDrawArrays(GL_LINES, 0, road_line_vertex_count)
+
         # Dibujo 1: Car
         # se activa el VAO del coche
         glBindVertexArray(car_vao)
@@ -345,6 +371,7 @@ def main():
 
         glBindVertexArray(front_wheel_vao)
         glDrawArrays(GL_TRIANGLE_FAN, 0, front_wheel_vertex_count)
+        #glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
         # Se intercambian los buffers.
         glfw.swap_buffers(window)
@@ -355,11 +382,16 @@ def main():
     glDeleteVertexArrays(1, [car_vao])
     glDeleteVertexArrays(1, [rear_wheel_vao])
     glDeleteVertexArrays(1, [front_wheel_vao])
+    glDeleteVertexArrays(1, [road_vao])
+    glDeleteVertexArrays(1, [road_line_vao])
     glDeleteBuffers(1, [mountain_vbo])
     glDeleteBuffers(1, [sun_vbo])
     glDeleteBuffers(1, [car_vbo])
     glDeleteBuffers(1, [rear_wheel_vbo])
     glDeleteBuffers(1, [front_wheel_vbo])
+    glDeleteBuffers(1, [road_vbo])
+    glDeleteBuffers(1, [road_line_vbo])
+
     glDeleteProgram(shader_program)
 
     # Se finaliza GLFW y se liberan los recursos asociados a la ventana
