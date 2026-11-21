@@ -1,9 +1,12 @@
 import glfw
 import numpy as np
 import ctypes
+import math
 from OpenGL.GL import *
 
 
+WINDOW_WIDTH=800
+WINDOW_HEIGHT=600
 # Código fuente del vertex shader
 VERTEX_SHADER_SOURCE = """
 #version 330 core
@@ -37,7 +40,7 @@ void main()
 """
 
 
-def init_window(width, height, title):
+def init_window(title):
     """
     Inicializa GLFW, crea una ventana y activa su contexto OpenGL.
     """
@@ -49,7 +52,7 @@ def init_window(width, height, title):
     glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
     glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
 
-    window = glfw.create_window(width, height, title, None, None)
+    window = glfw.create_window(WINDOW_WIDTH, WINDOW_HEIGHT, title, None, None)
     if not window:
         glfw.terminate()
         raise Exception("No se pudo crear la ventana GLFW.")
@@ -189,13 +192,40 @@ def create_object_vao(vertices):
 
     return vao_id, vbo_id, vertex_count
 
+def create_wheel_vertices(center_x:float, center_y:float, radius:float, center_color:list, rim_color:list, segments=16):
+    """
+    genera los vértices de una rueda, con GL_TRIANGLE_FAN se dibuja
+    primer vértice es el centro, resto son del borde
+    """
+
+    # centro concéntrico de todos los triángulos del abanico
+    vertices = [center_x, center_y, 0.0, *center_color]
+
+    # vértices del borde, repetimos el primero (+1) para cerrar el círculo
+#    for i in range(segments +1):
+#        angle = 2*math.pi*i/segments
+#        vertices +=[center_x, center_y, *rim_color ]
+
+    for i in range(segments + 1):
+        aspect_ratio = WINDOW_HEIGHT/WINDOW_WIDTH
+        angle = 2 * math.pi * i / segments
+        # 0.75 = 600 / 800: compensa que la ventana es más ancha que alta.
+        #x = center_x + radius * 0.75 * math.cos(angle)
+        x = center_x + radius * aspect_ratio * math.cos(angle)
+        y = center_y + radius * math.sin(angle)
+        vertices += [x, y, 0.0, *rim_color]
+
+    return vertices
+
+
+
 
 
 def main():
 
     # Se crea la ventana y se activa el contexto OpenGL asociado.
     # A partir de este momento ya se pueden realizar llamadas a OpenGL.
-    window = init_window(800, 600, "Actividad1 de Informática Gráfica, UNIR")
+    window = init_window("Actividad1 de Informática Gráfica, UNIR")
 
     # Se crea el programa shader a partir del código fuente del
     # vertex shader y del fragment shader.
@@ -240,10 +270,15 @@ def main():
 
     # Datos de los vértices de las ruedas del coche.
     # Cada rueda es un único vértice (x, y, z, r, g, b) que se dibuja como un punto grande.
-    wheel_vertices = [
-        -0.30, -0.900, 0.0,   0.10, 0.10, 0.10,   # rueda trasera
-         0.30, -0.900, 0.0,   0.10, 0.10, 0.10    # rueda delantera
-    ]
+#    wheel_vertices = [
+#        -0.30, -0.900, 0.0,   0.10, 0.10, 0.10,   # rueda trasera
+#         0.30, -0.900, 0.0,   0.10, 0.10, 0.10    # rueda delantera
+#    ]
+    # Vértices de las ruedas:centro gris, borde negro
+    center_color = [0.5, 0.5, 0.5]
+    rim_color = [0.05,0.05,0.05]
+    rear_wheel_vertices = create_wheel_vertices(-0.30, -0.90, 0.0, center_color, rim_color)
+    front_wheel_vertices = create_wheel_vertices(0.30, -0.90, 0.0, center_color, rim_color)
 
     # Se crean y configuran los recursos necesarios para dibujar cada objeto.
     # Cada objeto dispone de su propio VAO y VBO.
@@ -255,7 +290,8 @@ def main():
     )
 
     car_vao, car_vbo, car_vertex_count = create_object_vao(car_vertices)
-    wheel_vao, wheel_vbo, wheel_vertex_count = create_object_vao(wheel_vertices)
+    rear_wheel_vao, rear_wheel_vbo, rear_wheel_vertex_count = create_object_vao(rear_wheel_vertices)
+    front_wheel_vao, front_wheel_vbo, front_wheel_vertex_count = create_object_vao(front_wheel_vertices)
 
     # Bucle principal de renderizado.
     # Se ejecuta una vez por cada frame hasta que el usuario cierre la ventana.
@@ -280,10 +316,10 @@ def main():
         glLineWidth(1.0)
         glBindVertexArray(mountain_vao)
 
-        # Se lanza la llamada de dibujo del triángulo.
+        # Se lanza la llamada de dibujo de la montaña
         glDrawArrays(GL_TRIANGLES, 0, mountain_vertex_count)
 
-        # Se activa el VAO del pentágono.
+        # Se activa el VAO del sol
         # Al cambiar de VAO, OpenGL pasa a utilizar los datos y la configuración
         # correspondientes al segundo objeto.
         glBindVertexArray(sun_vao)
@@ -304,10 +340,11 @@ def main():
         glDrawArrays(GL_LINE_LOOP, 0, car_vertex_count)
 
         # Dibujo 2: Ruedas
-        glBindVertexArray(wheel_vao)
-        glPointSize(30)
-        glDrawArrays(GL_POINTS, 0, wheel_vertex_count)
+        glBindVertexArray(rear_wheel_vao)
+        glDrawArrays(GL_TRIANGLE_FAN, 0, rear_wheel_vertex_count)
 
+        glBindVertexArray(front_wheel_vao)
+        glDrawArrays(GL_TRIANGLE_FAN, 0, front_wheel_vertex_count)
 
         # Se intercambian los buffers.
         glfw.swap_buffers(window)
@@ -316,11 +353,13 @@ def main():
     glDeleteVertexArrays(1, [mountain_vao])
     glDeleteVertexArrays(1, [sun_vao])
     glDeleteVertexArrays(1, [car_vao])
-    glDeleteVertexArrays(1, [wheel_vao])
+    glDeleteVertexArrays(1, [rear_wheel_vao])
+    glDeleteVertexArrays(1, [front_wheel_vao])
     glDeleteBuffers(1, [mountain_vbo])
     glDeleteBuffers(1, [sun_vbo])
     glDeleteBuffers(1, [car_vbo])
-    glDeleteBuffers(1, [wheel_vbo])
+    glDeleteBuffers(1, [rear_wheel_vbo])
+    glDeleteBuffers(1, [front_wheel_vbo])
     glDeleteProgram(shader_program)
 
     # Se finaliza GLFW y se liberan los recursos asociados a la ventana
