@@ -277,8 +277,8 @@ def main():
     # Vértices de las ruedas:centro gris, borde negro
     center_color = [0.5, 0.5, 0.5]
     rim_color = [0.05,0.05,0.05]
-    rear_wheel_vertices = create_wheel_vertices(-0.30, -0.90, 0.0, center_color, rim_color)
-    front_wheel_vertices = create_wheel_vertices(0.30, -0.90, 0.0, center_color, rim_color)
+    rear_wheel_vertices = create_wheel_vertices(-0.30, -0.90, 0.06, center_color, rim_color)
+    front_wheel_vertices = create_wheel_vertices(0.30, -0.90, 0.06, center_color, rim_color)
 
     # Se crean y configuran los recursos necesarios para dibujar cada objeto.
     # Cada objeto dispone de su propio VAO y VBO.
