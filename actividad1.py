@@ -195,7 +195,7 @@ def main():
 
     # Se crea la ventana y se activa el contexto OpenGL asociado.
     # A partir de este momento ya se pueden realizar llamadas a OpenGL.
-    window = init_window(800, 600, "Ejemplo 3.3")
+    window = init_window(800, 600, "Actividad1 de Informática Gráfica, UNIR")
 
     # Se crea el programa shader a partir del código fuente del
     # vertex shader y del fragment shader.
@@ -204,7 +204,7 @@ def main():
         FRAGMENT_SHADER_SOURCE
     )
 
-    # Datos de los vértices del triángulo izquierdo.
+    # Datos de los vértices del triángulo, convertido en montaña.
     # Cada vértice contiene posición (x, y, z) y color (r, g, b).
     mountain_vertices = [
         -0.95, -0.5, 0.0,   0.15, 0.45, 0.15, # base izquierda, verde oscuro
@@ -212,7 +212,7 @@ def main():
         -0.55,  0.45, 0.0,   1.0, 1.0, 1.0    # cima
     ]
 
-    # Datos de los vértices del pentágono derecho.
+    # Datos de los vértices del pentágono, convertido en sol.
     sun_vertices = [
         0.600, 0.800, 0.0, 1.00, 0.85, 0.00,
         0.743, 0.662, 0.0, 1.00, 0.50, 0.00,
@@ -220,21 +220,22 @@ def main():
         0.512, 0.438, 0.0, 1.00, 0.50, 0.00,
         0.457, 0.662, 0.0, 1.00, 0.85, 0.00
     ]
-    # Datos de los vértices de la carrocería del coche (franja inferior).
+    # Datos de los vértices del coche
     # Todos los vértices tienen el mismo color: no hay interpolación visible.
+    car_color = [0.85, 0.15, 0.15] # aplicamos mismo color con expansión de listas
     car_vertices = [
-        -0.50, -0.750, 0.0,   0.85, 0.15, 0.15,
-        -0.40, -0.700, 0.0,   0.85, 0.15, 0.15,
-        -0.30, -0.675, 0.0,   0.85, 0.15, 0.15,
-        -0.25, -0.600, 0.0,   0.85, 0.15, 0.15,
-         0.00, -0.600, 0.0,   0.85, 0.15, 0.15,
-         0.20, -0.600, 0.0,   0.85, 0.15, 0.15,
-         0.40, -0.700, 0.0,   0.85, 0.15, 0.15,
-         0.55, -0.710, 0.0,   0.85, 0.15, 0.15,
-         0.50, -0.900, 0.0,   0.85, 0.15, 0.15,
-         0.40, -0.900, 0.0,   0.85, 0.15, 0.15,
-         0.30, -0.900, 0.0,   0.85, 0.15, 0.15,
-        -0.50, -0.900, 0.0,   0.85, 0.15, 0.15   # esquina trasera inferior: cierre vertical
+        -0.50, -0.750, 0.0,   *car_color,
+        -0.40, -0.700, 0.0,   *car_color,
+        -0.30, -0.675, 0.0,   *car_color,
+        -0.25, -0.600, 0.0,   *car_color,
+         0.00, -0.600, 0.0,   *car_color,
+         0.20, -0.600, 0.0,   *car_color,
+         0.40, -0.700, 0.0,   *car_color,
+         0.55, -0.710, 0.0,   *car_color,
+         0.50, -0.900, 0.0,   *car_color,
+         0.40, -0.900, 0.0,   *car_color,
+         0.30, -0.900, 0.0,   *car_color,
+        -0.50, -0.900, 0.0,   *car_color
     ]
 
     # Datos de los vértices de las ruedas del coche.
@@ -306,8 +307,6 @@ def main():
         glBindVertexArray(wheel_vao)
         glPointSize(30)
         glDrawArrays(GL_POINTS, 0, wheel_vertex_count)
-        #glLineWidth(6.0)
-        #glDrawArrays(GL_LINE_LOOP, 0, wheel_vertex_count)
 
 
         # Se intercambian los buffers.
