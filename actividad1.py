@@ -365,13 +365,17 @@ def main():
         # llamada de dibujo
         glDrawArrays(GL_LINE_LOOP, 0, car_vertex_count)
 
+
         # Dibujo 2: Ruedas
+        # modo wireframe para mostrar las aristas>radios de las ruedas
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
         glBindVertexArray(rear_wheel_vao)
         glDrawArrays(GL_TRIANGLE_FAN, 0, rear_wheel_vertex_count)
 
         glBindVertexArray(front_wheel_vao)
         glDrawArrays(GL_TRIANGLE_FAN, 0, front_wheel_vertex_count)
-        #glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+        # PolygonMode es estado global: se restaura el relleno de figuras
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
         # Se intercambian los buffers.
         glfw.swap_buffers(window)
