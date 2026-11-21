@@ -147,8 +147,11 @@ def create_object_vao(vertices):
     # de vértice quedarán asociadas a este VAO.
     glBindVertexArray(vao_id)
 
+    # los VAO describen la estructura mediante stride y offset
     # Cada vértice tiene 6 valores float: 3 de posición y 3 de color.
     stride = 6 * vertices.itemsize
+    position_offset = ctypes.c_void_p(0)
+    color_offset = ctypes.c_void_p(3*vertices.itemsize)
 
     # Se describe el atributo de posición:
     glVertexAttribPointer(
@@ -157,7 +160,7 @@ def create_object_vao(vertices):
         GL_FLOAT,                               # cada componente es un número float.
         GL_FALSE,                               # ignorar este parámetro.
         stride,                                 # salto entre posiciones consecutivas.
-        ctypes.c_void_p(0)                      # la posición empieza en el byte 0 del VBO.
+        position_offset                      # la posición empieza en el byte 0 del VBO.
     )
 
     # Se habilita el atributo de vértice en la location 0.
@@ -171,7 +174,7 @@ def create_object_vao(vertices):
         GL_FLOAT,                               # cada componente es un número float.
         GL_FALSE,                               # ignorar este parámetro.
         stride,                                 # salto entre colores consecutivos.
-        ctypes.c_void_p(3 * vertices.itemsize)  # el color comienza tras los 3 float de posición.
+        color_offset                            # el color comienza tras los 3 float de posición.
     )
 
     # Se habilita el atributo de vértice en la location 1.
@@ -203,19 +206,19 @@ def main():
 
     # Datos de los vértices del triángulo izquierdo.
     # Cada vértice contiene posición (x, y, z) y color (r, g, b).
-    triangle_vertices = [
-        -0.8, -0.5, 0.0,   1.0, 0.0, 0.0,
-        -0.2, -0.5, 0.0,   0.0, 1.0, 0.0,
-        -0.5,  0.3, 0.0,   0.0, 0.0, 1.0
+    mountain_vertices = [
+        -0.95, -0.5, 0.0,   0.15, 0.45, 0.15, # base izquierda, verde oscuro
+        -0.15, -0.5, 0.0,   0.25, 0.60, 0.25, # base derecha, verde claro
+        -0.55,  0.45, 0.0,   1.0, 1.0, 1.0    # cima
     ]
 
     # Datos de los vértices del pentágono derecho.
-    pentagon_vertices = [
-         0.45,  0.35, 0.0,   0.0, 0.0, 1.0,
-         0.75,  0.15, 0.0,   0.0, 1.0, 1.0,
-         0.65, -0.20, 0.0,   1.0, 0.0, 1.0,
-         0.25, -0.20, 0.0,   0.0, 0.0, 1.0,
-         0.15,  0.15, 0.0,   0.0, 1.0, 1.0
+    sun_vertices = [
+        0.600, 0.800, 0.0, 1.00, 0.85, 0.00,
+        0.743, 0.662, 0.0, 1.00, 0.50, 0.00,
+        0.688, 0.438, 0.0, 1.00, 0.85, 0.00,
+        0.512, 0.438, 0.0, 1.00, 0.50, 0.00,
+        0.457, 0.662, 0.0, 1.00, 0.85, 0.00
     ]
     # Datos de los vértices de la carrocería del coche (franja inferior).
     # Todos los vértices tienen el mismo color: no hay interpolación visible.
@@ -243,11 +246,11 @@ def main():
 
     # Se crean y configuran los recursos necesarios para dibujar cada objeto.
     # Cada objeto dispone de su propio VAO y VBO.
-    triangle_vao, triangle_vbo, triangle_vertex_count = create_object_vao(
-        triangle_vertices
+    mountain_vao, mountain_vbo, mountain_vertex_count = create_object_vao(
+        mountain_vertices
     )
-    pentagon_vao, pentagon_vbo, pentagon_vertex_count = create_object_vao(
-        pentagon_vertices
+    sun_vao, sun_vbo, sun_vertex_count = create_object_vao(
+        sun_vertices
     )
 
     car_vao, car_vbo, car_vertex_count = create_object_vao(car_vertices)
@@ -274,15 +277,15 @@ def main():
         # de qué VBO leer los datos y cómo interpretar sus atributos.
 
         glLineWidth(1.0)
-        glBindVertexArray(triangle_vao)
+        glBindVertexArray(mountain_vao)
 
         # Se lanza la llamada de dibujo del triángulo.
-        glDrawArrays(GL_TRIANGLES, 0, triangle_vertex_count)
+        glDrawArrays(GL_TRIANGLES, 0, mountain_vertex_count)
 
         # Se activa el VAO del pentágono.
         # Al cambiar de VAO, OpenGL pasa a utilizar los datos y la configuración
         # correspondientes al segundo objeto.
-        glBindVertexArray(pentagon_vao)
+        glBindVertexArray(sun_vao)
 
         # Se establece el grosor con el que se dibujarán las líneas.
         glLineWidth(8.0)
@@ -290,7 +293,7 @@ def main():
         # Se lanza una segunda llamada de dibujo.
         # GL_LINE_LOOP conecta los vértices mediante segmentos y une
         # también el último vértice con el primero.
-        glDrawArrays(GL_LINE_LOOP, 0, pentagon_vertex_count)
+        glDrawArrays(GL_LINE_LOOP, 0, sun_vertex_count)
 
         # Dibujo 1: Car
         # se activa el VAO del coche
@@ -311,12 +314,12 @@ def main():
         glfw.swap_buffers(window)
 
     # Se liberan los recursos de OpenGL creados durante la ejecución del programa.
-    glDeleteVertexArrays(1, [triangle_vao])
-    glDeleteVertexArrays(1, [pentagon_vao])
+    glDeleteVertexArrays(1, [mountain_vao])
+    glDeleteVertexArrays(1, [sun_vao])
     glDeleteVertexArrays(1, [car_vao])
     glDeleteVertexArrays(1, [wheel_vao])
-    glDeleteBuffers(1, [triangle_vbo])
-    glDeleteBuffers(1, [pentagon_vbo])
+    glDeleteBuffers(1, [mountain_vbo])
+    glDeleteBuffers(1, [sun_vbo])
     glDeleteBuffers(1, [car_vbo])
     glDeleteBuffers(1, [wheel_vbo])
     glDeleteProgram(shader_program)
