@@ -1,7 +1,7 @@
+import math
+import ctypes
 import glfw
 import numpy as np
-import ctypes
-import math
 from OpenGL.GL import *
 
 
@@ -117,8 +117,8 @@ def create_shader_program(vertex_source, fragment_source):
 
 def create_object_vao(vertices):
     """
-    Define los datos de los vértices de un objeto, los almacena en un VBO y configura
-    un VAO para indicar cómo deben interpretarse esos datos.
+    Define los datos de los vértices de un objeto, los almacena en un VBO
+    y configura un VAO para indicar cómo deben interpretarse esos datos.
 
     Devuelve:
         vao_id: identificador del VAO configurado.
@@ -197,15 +197,8 @@ def create_wheel_vertices(center_x:float, center_y:float, radius:float, center_c
     genera los vértices de una rueda, con GL_TRIANGLE_FAN se dibuja
     primer vértice es el centro, resto son del borde
     """
-
     # centro concéntrico de todos los triángulos del abanico
     vertices = [center_x, center_y, 0.0, *center_color]
-
-    # vértices del borde, repetimos el primero (+1) para cerrar el círculo
-#    for i in range(segments +1):
-#        angle = 2*math.pi*i/segments
-#        vertices +=[center_x, center_y, *rim_color ]
-
     aspect_ratio = WINDOW_HEIGHT / WINDOW_WIDTH
     for i in range(segments + 1):
         angle = 2 * math.pi * i / segments
@@ -215,14 +208,10 @@ def create_wheel_vertices(center_x:float, center_y:float, radius:float, center_c
 
     return vertices
 
-
-
 def main():
-
     # Se crea la ventana y se activa el contexto OpenGL asociado.
     # A partir de este momento ya se pueden realizar llamadas a OpenGL.
     window = init_window("Actividad1 de Informática Gráfica, UNIR")
-
     # Se crea el programa shader a partir del código fuente del
     # vertex shader y del fragment shader.
     shader_program = create_shader_program(
@@ -270,10 +259,10 @@ def main():
     rear_wheel_vertices = create_wheel_vertices(-0.30, -0.90, 0.06, center_color, rim_color)
     front_wheel_vertices = create_wheel_vertices(0.30, -0.90, 0.06, center_color, rim_color)
 
-    # Datos de los vértices del asfalto: rectángulo con GL_TRIANGLE_STRIP.
-    # 4 vértices en ZIGZAG: cada vértice nuevo forma un triángulo con los 2 anteriores.
-    #   v2 ──────── v3      triángulo 1: v0, v1, v2
-    #   │  ╲         │      triángulo 2: v1, v2, v3
+    # Datos de los vértices del asfalto: rectángulo con GL_TRIANGLE_FAN.
+    # 4 vértices recorriendo el CONTORNO: todos los triángulos comparten v0.
+    #   v3 ──────── v2      triángulo 1: v0, v1, v2
+    #   │         ╱  │      triángulo 2: v0, v2, v3
     #   v0 ──────── v1
     road_color = [0.30, 0.30, 0.30]
     road_vertices = [
@@ -330,25 +319,15 @@ def main():
         # Se activa el VAO del triángulo.
         # El VAO contiene la configuración necesaria para que OpenGL sepa
         # de qué VBO leer los datos y cómo interpretar sus atributos.
-
-        glLineWidth(1.0)
         glBindVertexArray(mountain_vao)
-
+        glLineWidth(1.0)
         # Se lanza la llamada de dibujo de la montaña
         glDrawArrays(GL_TRIANGLES, 0, mountain_vertex_count)
 
-        # Se activa el VAO del sol
-        # Al cambiar de VAO, OpenGL pasa a utilizar los datos y la configuración
-        # correspondientes al segundo objeto.
+        # Se activa el VAO del sol, ahora con triangle_fan para relleno
+        # originalmente era GL_LINE_LOOP y sólo contorno
         glBindVertexArray(sun_vao)
-
-        # Se establece el grosor con el que se dibujarán las líneas.
-        glLineWidth(8.0)
-
-        # Se lanza una segunda llamada de dibujo.
-        # GL_LINE_LOOP conecta los vértices mediante segmentos y une
-        # también el último vértice con el primero.
-        glDrawArrays(GL_LINE_LOOP, 0, sun_vertex_count)
+        glDrawArrays(GL_TRIANGLE_FAN, 0, sun_vertex_count)
 
         # Dibujo 3: Carretera
         glBindVertexArray(road_vao)
@@ -362,7 +341,7 @@ def main():
         # se activa el VAO del coche
         glBindVertexArray(car_vao)
         glLineWidth(5.0)
-        # llamada de dibujo
+        # GL_LINE_LOOP conecta los vértices mediante segmentos y une 1er y último vértice
         glDrawArrays(GL_LINE_LOOP, 0, car_vertex_count)
 
 
